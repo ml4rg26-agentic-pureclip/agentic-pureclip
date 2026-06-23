@@ -1,0 +1,18 @@
+{
+  "target_protein": "RBFOX2",
+  "clip_protocol": "eCLIP",
+  "expected_footprint_width_nt": 9,
+  "preferred_transcript_region": [
+    "intron"
+  ],
+  "known_motifs": [
+    {
+      "pattern": "UGCAUG",
+      "type": "target"
+    }
+  ],
+
+  "binding_breadth": "moderate",
+  "reference_target": "genome",
+  "primary_objective_metric": "replicate_agreement"
+}

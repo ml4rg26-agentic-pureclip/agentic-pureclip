@@ -1,0 +1,41 @@
+# ==============================
+# System & IDE files
+# ==============================
+.DS_Store
+.idea/
+.vscode/
+
+# ==============================
+# Python & Testing Caches
+# ==============================
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ==============================
+# Environment & Secrets
+# ==============================
+.env
+# Note: .env.example should NOT be ignored so team members can see what variables are needed.
+
+# ==============================
+# Snakemake & Frameworks
+# ==============================
+.snakemake/
+.langgraph_api/
+
+# ==============================
+# Logs
+# ==============================
+*.log
+logs/
+
+# ==============================
+# Data, References & Results
+# ==============================
+# These directories contain massive BAM/FASTA files and should be generated 
+# locally by running scripts/setup_chr21_bams.sh instead of tracking in Git.
+data/
+ref/
+results/
+results_mock/

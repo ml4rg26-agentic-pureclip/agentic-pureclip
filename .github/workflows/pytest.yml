@@ -1,0 +1,42 @@
+name: Pytest CI
+
+on:
+  push:
+    branches:
+      - master
+      - develop
+  pull_request:
+    branches:
+      - master
+      - develop
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Conda Environment
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        activate-environment: agentic-pureclip
+        environment-file: environment.yml
+        python-version: "3.10"
+        auto-activate-base: false
+        
+    - name: Create dummy files for Snakemake dry-run
+      # Since we removed preprocessing rules, a clean GitHub environment without BAM files will cause a dry-run error.
+      # Here we manually create empty dummy files to bypass Snakemake's dependency check.
+      run: |
+        mkdir -p results/ip_rep1 results/ip_rep2 results/input_control_rep1
+        touch results/ip_rep1/dedup.bam results/ip_rep1/dedup.bam.bai
+        touch results/ip_rep2/dedup.bam results/ip_rep2/dedup.bam.bai
+        touch results/input_control_rep1/dedup.bam results/input_control_rep1/dedup.bam.bai
+        
+    - name: Run Pytest
+      # Must use bash -el to ensure the conda environment is loaded correctly
+      shell: bash -el {0}
+      run: |
+        pytest -v
