@@ -1,0 +1,21 @@
+[project]
+name = "agentic-pureclip"
+version = "0.1.0"
+description = "LLM-driven PureCLIP parameter optimization for eCLIP data"
+requires-python = ">=3.10"
+dependencies = [
+    "gdown>=5.0",
+    "snakemake>=7.32",
+    "tomli>=2.0",
+    "langgraph>=0.2.0",
+    "langchain-openai>=0.3.0",
+    "langsmith",
+    "python-dotenv",
+    "pytest",
+    "pydantic>=2.0",
+    "pyyaml",
+    "pandas",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
