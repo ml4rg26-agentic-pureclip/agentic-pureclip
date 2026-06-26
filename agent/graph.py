@@ -7,7 +7,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
 from agent.decisions import (
-    DEFAULT_MOTIF_WEIGHT,
+    DEFAULT_OBJECTIVE_WEIGHTS,
     build_decision_prompt,
     composite_objective,
     parse_decision_response,
@@ -75,7 +75,7 @@ def run_scorers(state: AgentState) -> dict:
     return {}
 
 
-def _propose_next_config(state: AgentState, report: dict, motif_weight: float):
+def _propose_next_config(state: AgentState, report: dict, weights: dict):
     """Ask the LLM for a novel, valid next config.
 
     The search space is small and the LLM may repeat a tried parameter set or
@@ -86,7 +86,7 @@ def _propose_next_config(state: AgentState, report: dict, motif_weight: float):
     feedback = None
     decision = None
     for attempt in range(1, MAX_DECISION_RETRIES + 1):
-        resp = llm.invoke(build_decision_prompt(state, report, motif_weight, feedback))
+        resp = llm.invoke(build_decision_prompt(state, report, weights, feedback))
         try:
             decision = parse_decision_response(resp.content)
         except (json.JSONDecodeError, ValueError) as exc:
@@ -109,12 +109,13 @@ def agent_decide(state: AgentState) -> dict:
     logger.info("Agent is deciding on next config")
     with open(score_report_path(state["current_config"]), "r", encoding="utf-8") as handle:
         report = json.load(handle)
-    motif_weight = float(state["priors"].get("motif_weight", DEFAULT_MOTIF_WEIGHT))
-    objective = composite_objective(report, motif_weight)
+    weights = state["priors"].get("objective_weights") or DEFAULT_OBJECTIVE_WEIGHTS
+    objective = composite_objective(report, weights)
     logger.info(
-        "Scores: agreement=%s motif_hit_rate=%s composite=%.4f (best so far=%.4f)",
-        report.get("replicate_agreement"),
+        "Scores: reproducibility=%s motif=%s recall=%s composite=%.4f (best so far=%.4f)",
+        report.get("reproducibility_score", report.get("replicate_agreement")),
         report.get("motif_hit_rate"),
+        report.get("benchmark_region_recall"),
         objective,
         state["best_score"],
     )
@@ -123,7 +124,7 @@ def agent_decide(state: AgentState) -> dict:
     best_score = objective if improved else state["best_score"]
     best_config = state["current_config"] if improved else state["best_config"]
 
-    decision, new_config = _propose_next_config(state, report, motif_weight)
+    decision, new_config = _propose_next_config(state, report, weights)
 
     record: IterationRecord = {
         "iteration": state["current_iteration"],

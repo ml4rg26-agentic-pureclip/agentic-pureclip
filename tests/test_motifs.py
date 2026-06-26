@@ -49,3 +49,21 @@ def test_composite_penalises_reproducible_noise():
 
 def test_composite_falls_back_without_motif():
     assert composite_objective({"replicate_agreement": 0.5, "motif_hit_rate": None}) == 0.5
+
+
+def test_composite_recall_punishes_site_collapse():
+    # Collapsing sites can raise reproducibility & motif but drops known-site recall;
+    # the composite must not reward it.
+    broad = {"reproducibility_score": 0.30, "motif_hit_rate": 0.30, "benchmark_region_recall": 0.40}
+    collapsed = {"reproducibility_score": 0.35, "motif_hit_rate": 0.35, "benchmark_region_recall": 0.10}
+    assert composite_objective(collapsed) < composite_objective(broad)
+
+
+def test_composite_prefers_chance_corrected_reproducibility():
+    # Raw agreement is gameable; the chance-corrected score should be used instead.
+    report = {"replicate_agreement": 0.90, "reproducibility_score": 0.10}
+    assert composite_objective(report) == 0.10
+
+
+def test_composite_renormalises_over_present_terms():
+    assert composite_objective({"reproducibility_score": 0.42}) == 0.42

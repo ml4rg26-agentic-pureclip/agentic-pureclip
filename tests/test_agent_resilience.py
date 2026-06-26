@@ -47,7 +47,7 @@ def test_repeat_proposal_retries_then_gives_up(monkeypatch):
 
     monkeypatch.setattr(g, "llm", FakeLLM())
     decision, new_config = g._propose_next_config(
-        state, {"replicate_agreement": 0.1, "motif_hit_rate": 0.1}, 0.25
+        state, {"replicate_agreement": 0.1, "motif_hit_rate": 0.1}, g.DEFAULT_OBJECTIVE_WEIGHTS
     )
     assert new_config is None
     assert decision is not None
@@ -65,7 +65,7 @@ def test_valid_proposal_is_accepted(monkeypatch):
 
     monkeypatch.setattr(g, "llm", FakeLLM())
     decision, new_config = g._propose_next_config(
-        state, {"replicate_agreement": 0.1, "motif_hit_rate": 0.1}, 0.25
+        state, {"replicate_agreement": 0.1, "motif_hit_rate": 0.1}, g.DEFAULT_OBJECTIVE_WEIGHTS
     )
     assert new_config is not None
     assert new_config["pureclip"]["bandwidth_nt"] == new_bw
