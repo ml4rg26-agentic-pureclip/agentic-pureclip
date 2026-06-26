@@ -27,16 +27,24 @@ import yaml
 
 # Keep the dashboard's composite in lock-step with the agent's objective.
 try:
-    from agent.decisions import composite_objective, DEFAULT_MOTIF_WEIGHT
+    from agent.decisions import composite_objective
 except Exception:  # pragma: no cover - fallback if agent package not importable
-    DEFAULT_MOTIF_WEIGHT = 0.25
-
-    def composite_objective(report: dict, motif_weight: float = DEFAULT_MOTIF_WEIGHT) -> float:
-        agreement = report.get("replicate_agreement") or 0.0
-        motif = report.get("motif_hit_rate")
-        if motif is None or motif_weight <= 0:
-            return float(agreement)
-        return float((1 - motif_weight) * agreement + motif_weight * motif)
+    def composite_objective(report: dict, weights=None) -> float:
+        weights = weights or {"reproducibility": 0.5, "motif": 0.25, "recall": 0.25}
+        terms = {}
+        rep = report.get("reproducibility_score")
+        if rep is None:
+            rep = report.get("replicate_agreement")
+        if rep is not None:
+            terms["reproducibility"] = float(rep)
+        if report.get("motif_hit_rate") is not None:
+            terms["motif"] = float(report["motif_hit_rate"])
+        if report.get("benchmark_region_recall") is not None:
+            terms["recall"] = float(report["benchmark_region_recall"])
+        total = sum(weights.get(k, 0.0) for k in terms)
+        if not terms or total <= 0:
+            return 0.0
+        return float(sum(weights.get(k, 0.0) * v for k, v in terms.items()) / total)
 
 
 RESULT_ROOTS = [Path("results/runs"), Path("results/batch")]
@@ -201,8 +209,11 @@ def collect_experiments() -> list[dict]:
                 "iter": _iter_index(run_id),
                 "n_sites": d.get("n_binding_sites"),
                 "agreement": d.get("replicate_agreement"),
+                "reproducibility": d.get("reproducibility_score"),
+                "repro_enrichment": d.get("reproducibility_enrichment"),
                 "motif": d.get("motif_hit_rate"),
                 "enrichment": d.get("motif_enrichment"),
+                "recall": d.get("benchmark_region_recall"),
                 "composite": round(comp, 4) if comp is not None else None,
                 "source": root.name,
                 "mtime": report.stat().st_mtime,
@@ -444,11 +455,12 @@ function renderActive(a, stages){
   h += '</div>';
 
   const m = a.latest || {};
+  const repro = (m.reproducibility!==null&&m.reproducibility!==undefined) ? m.reproducibility : m.agreement;
   h += `<div class="metrics">
     <div class="metric-card primary"><div class="v">${fmt(m.composite)}</div><div class="l">composite</div></div>
-    <div class="metric-card"><div class="v">${fmt(m.agreement)}</div><div class="l">replicate agreement</div></div>
-    <div class="metric-card"><div class="v">${fmt(m.motif)}</div><div class="l">motif hit-rate</div></div>
-    <div class="metric-card"><div class="v">${fmtx(m.enrichment)}</div><div class="l">motif enrichment</div></div>
+    <div class="metric-card"><div class="v">${fmt(repro)}</div><div class="l">reproducibility${m.repro_enrichment!==null&&m.repro_enrichment!==undefined?` (${fmtx(m.repro_enrichment)})`:''}</div></div>
+    <div class="metric-card"><div class="v">${fmt(m.motif)}</div><div class="l">motif hit-rate (${fmtx(m.enrichment)})</div></div>
+    <div class="metric-card"><div class="v">${fmt(m.recall)}</div><div class="l">known-site recall</div></div>
     <div class="metric-card"><div class="v">${m.n_sites??'—'}</div><div class="l">binding sites</div></div>
   </div>`;
 
@@ -496,20 +508,21 @@ function renderExperiments(exps){
         ${sparkline(g.iterations)}
       </div>`;
     html += `<table><tr>
-      <th>run</th><th>iter</th><th>sites</th><th>agreement</th>
-      <th>motif</th><th>enrichment</th><th>composite</th><th>src</th></tr>`;
+      <th>run</th><th>iter</th><th>sites</th><th>reprod.</th>
+      <th>motif</th><th>recall</th><th>composite</th><th>src</th></tr>`;
     for(const it of g.iterations){
       const isBest = it.run_id===g.best_run;
       const srcBadge = it.source==='batch'
         ? '<span class="badge badge-batch src">batch</span>'
         : '<span class="badge badge-live src">live</span>';
+      const repro = (it.reproducibility!==null&&it.reproducibility!==undefined) ? it.reproducibility : it.agreement;
       html += `<tr class="${isBest?'best':''}">
         <td>${esc(it.run_id)}</td>
         <td>${it.iter===null?'—':it.iter}</td>
         <td>${it.n_sites??'—'}</td>
-        <td>${fmt(it.agreement)}</td>
+        <td>${fmt(repro)}</td>
         <td>${fmt(it.motif)}</td>
-        <td>${fmtx(it.enrichment)}</td>
+        <td>${fmt(it.recall)}</td>
         <td><b>${fmt(it.composite)}</b></td>
         <td>${srcBadge}</td>
       </tr>`;
