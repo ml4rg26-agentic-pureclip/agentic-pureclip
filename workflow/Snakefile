@@ -1,29 +1,50 @@
 # workflow/Snakefile
 import os
-import yaml
+
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "config/run_config.yaml")
 configfile: CONFIG_PATH
 
 
 IP_REPS = list(config["samples"]["ip"].keys())
+RESULTS_DIR = str(config.get("output", {}).get("results_dir", "results")).replace("\\", "/").rstrip("/")
+SCORE_REPORT = str(config.get("output", {}).get("score_report", f"{RESULTS_DIR}/score_report.json")).replace("\\", "/")
+
+MERGED_BAM = f"{RESULTS_DIR}/merged_ip.bam"
+MERGED_BAI = f"{RESULTS_DIR}/merged_ip.bam.bai"
+MERGED_SITES = f"{RESULTS_DIR}/PureCLIP.crosslink_sites.bed"
+MERGED_REGIONS = f"{RESULTS_DIR}/PureCLIP.binding_regions.bed"
+BINDING_SITES = f"{RESULTS_DIR}/binding_sites.reproducible.bed"
+
+ruleorder: merge_ip > index_input_bam
+
 
 rule all:
     input:
-        "results/PureCLIP.crosslink_sites.bed",
-        "results/PureCLIP.binding_regions.bed",
-        "results/binding_sites.reproducible.bed",
-        expand("results/ip_{rep}/pureclip_sites.bed", rep=IP_REPS),
-        "results/score_report.json"
+        MERGED_SITES,
+        MERGED_REGIONS,
+        BINDING_SITES,
+        expand(f"{RESULTS_DIR}/ip_{{rep}}/pureclip_sites.bed", rep=IP_REPS),
+        SCORE_REPORT
+
+
+rule index_input_bam:
+    input:
+        bam="{bam}.bam"
+    output:
+        bai="{bam}.bam.bai"
+    shell:
+        "samtools index {input.bam}"
+
 
 rule merge_ip:
     input:
         [config["samples"]["ip"][rep]["bam"] for rep in IP_REPS]
     output:
-        bam="results/merged_ip.bam",
-        bai="results/merged_ip.bam.bai"
+        bam=MERGED_BAM,
+        bai=MERGED_BAI
     log:
-        "results/logs/merge_ip.log"
+        f"{RESULTS_DIR}/logs/merge_ip.log"
     shell:
         """
         echo "[merge_ip] inputs={input}" > {log}
@@ -31,16 +52,17 @@ rule merge_ip:
         samtools index {output.bam} >> {log} 2>&1
         """
 
+
 rule pureclip:
     input:
-        bam="results/merged_ip.bam",
-        bai="results/merged_ip.bam.bai",
+        bam=MERGED_BAM,
+        bai=MERGED_BAI,
         genome=config["reference"]["genome_fasta"],
         input_bam=config["samples"]["input_control"]["rep1"]["bam"] if config["pureclip"]["use_input_covariate"] else [],
         input_bai=config["samples"]["input_control"]["rep1"]["bam"] + ".bai" if config["pureclip"]["use_input_covariate"] else []
     output:
-        sites="results/PureCLIP.crosslink_sites.bed",
-        regions="results/PureCLIP.binding_regions.bed"
+        sites=MERGED_SITES,
+        regions=MERGED_REGIONS
     params:
         bw=config["pureclip"]["bandwidth_nt"],
         dm=config["pureclip"]["merge_distance_nt"],
@@ -50,7 +72,7 @@ rule pureclip:
               if config["pureclip"]["use_input_covariate"] else "")
     threads: config["resources"]["threads"]
     log:
-        "results/logs/pureclip_merged.log"
+        f"{RESULTS_DIR}/logs/pureclip_merged.log"
     shell:
         """
         echo "[pureclip merged] bw={params.bw} dm={params.dm} ld='{params.ld}'" > {log}
@@ -67,6 +89,7 @@ rule pureclip:
             -or {output.regions} >> {log} 2>&1
         """
 
+
 rule pureclip_per_replicate:
     input:
         bam=lambda wildcards: config["samples"]["ip"][wildcards.rep]["bam"],
@@ -75,8 +98,8 @@ rule pureclip_per_replicate:
         input_bam=config["samples"]["input_control"]["rep1"]["bam"] if config["pureclip"]["use_input_covariate"] else [],
         input_bai=config["samples"]["input_control"]["rep1"]["bam"] + ".bai" if config["pureclip"]["use_input_covariate"] else []
     output:
-        sites="results/ip_{rep}/pureclip_sites.bed",
-        regions="results/ip_{rep}/pureclip_regions.bed"
+        sites=f"{RESULTS_DIR}/ip_{{rep}}/pureclip_sites.bed",
+        regions=f"{RESULTS_DIR}/ip_{{rep}}/pureclip_regions.bed"
     params:
         bw=config["pureclip"]["bandwidth_nt"],
         dm=config["pureclip"]["merge_distance_nt"],
@@ -86,7 +109,7 @@ rule pureclip_per_replicate:
               if config["pureclip"]["use_input_covariate"] else "")
     threads: config["resources"]["threads"]
     log:
-        "results/ip_{rep}/logs/pureclip.log"
+        f"{RESULTS_DIR}/ip_{{rep}}/logs/pureclip.log"
     shell:
         """
         echo "[pureclip per-rep] rep={wildcards.rep} bw={params.bw} dm={params.dm}" > {log}
@@ -103,28 +126,30 @@ rule pureclip_per_replicate:
             -or {output.regions} >> {log} 2>&1
         """
 
+
 rule postprocess:
     input:
-        regions="results/PureCLIP.binding_regions.bed",
-        sites="results/PureCLIP.crosslink_sites.bed"
+        regions=MERGED_REGIONS,
+        sites=MERGED_SITES
     output:
-        bed="results/binding_sites.reproducible.bed"
+        bed=BINDING_SITES
     params:
         config_path=CONFIG_PATH
     log:
-        "results/logs/postprocess.log"
+        f"{RESULTS_DIR}/logs/postprocess.log"
     shell:
-        "PYTHONPATH=. python workflow/postprocess.py {params.config_path} {output.bed} 2>&1 | tee {log}"
+        "PYTHONPATH=. python workflow/postprocess.py {params.config_path} {output.bed} {input.regions} 2>&1 | tee {log}"
+
 
 rule score:
     input:
-        merged_sites="results/binding_sites.reproducible.bed",
-        rep_regions=expand("results/ip_{rep}/pureclip_regions.bed", rep=IP_REPS)
+        merged_sites=BINDING_SITES,
+        rep_regions=expand(f"{RESULTS_DIR}/ip_{{rep}}/pureclip_regions.bed", rep=IP_REPS)
     output:
-        report="results/score_report.json"
+        report=SCORE_REPORT
     params:
         config_path=CONFIG_PATH
     log:
-        "results/logs/score.log"
+        f"{RESULTS_DIR}/logs/score.log"
     shell:
         "PYTHONPATH=. python scorers/run_scorers.py {params.config_path} {output.report} > {log} 2>&1"

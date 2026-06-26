@@ -44,11 +44,34 @@ cp .env.example .env
    nohup env CONFIG_PATH=config/run_config.yaml MAX_ITER=5 python -m agent.graph > background_run.log 2>&1 &
    ```
 
-The agent logs its reasoning to `results/logs/`. The optimal parameters are saved to `config/best_config.yaml`.
+The agent writes every iteration to its own configured output directory under `results/runs/`. The optimal parameters are saved to `config/best_config.yaml`.
+
+### Reproducible Direct Runs
+
+Run the Snakemake workflow directly with an explicit Snakefile and config:
+
+```bash
+snakemake -s workflow/Snakefile -j 8 --configfile config/run_config.yaml --rerun-incomplete
+```
+
+Run one of the local full-size datasets:
+
+```bash
+snakemake -s workflow/Snakefile -j 8 --configfile config/datasets/RBFOX2_K562.yaml --rerun-incomplete
+```
+
+Dataset configs live in `config/datasets/` and point at the ignored local `data/` tree. The workflow can build missing `.bam.bai` indexes with `samtools index`.
+
+To regenerate a dataset config from the registry:
+
+```bash
+python scripts/write_dataset_config.py RBFOX2_K562 --out config/datasets/RBFOX2_K562.yaml
+```
 
 ## Architecture
 
 - [`agent/`](agent/README.md): LangGraph state machine, LLM decision-making, and iteration history.
+- [`pipeline/`](pipeline/README.md): Config validation, dataset registry, and reproducible execution helpers.
 - [`workflow/`](workflow/README.md): Snakemake pipeline and `postprocess.py` for biological footprint standardization.
 - [`scorers/`](scorers/README.md): Evaluation metrics (`replicate_agreement`, `motif_hit_rate`).
 - [`config/`](config/README.md): Datasets configuration and biological priors.

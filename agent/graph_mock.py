@@ -16,7 +16,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from langgraph.graph import StateGraph, START, END
-from langchain_google_genai import ChatGoogleGenerativeAI
+try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
+except ImportError:
+    ChatGoogleGenerativeAI = None
 from agent.state import AgentState, IterationRecord
 from agent.logging_config import setup_logger
 
@@ -35,8 +38,10 @@ SCORE_MODE = os.environ.get("MOCK_SCORE_MODE", "plateau")
 CONFIG_PATH = "config/run_config.yaml"
 REPORT_PATH = "results/score_report.json"
 
-if USE_GEMINI:
+if USE_GEMINI and ChatGoogleGenerativeAI is not None:
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.2)
+else:
+    llm = None
 
 # MOCK NODES
 
@@ -112,6 +117,8 @@ def agent_decide(state: AgentState) -> dict:
              state["objective_metric"], objective, state["best_score"])
 
     if USE_GEMINI:
+        if llm is None:
+            raise RuntimeError("USE_GEMINI=1 but langchain_google_genai is not installed")
         prompt = f"""You are optimising PureCLIP parameters for eCLIP data.
 
 PRIOR KNOWLEDGE:
