@@ -29,3 +29,13 @@ The script calculates several metrics. Below is an explanation of how they are c
 * **How it is calculated**: If a known target motif (e.g., `UGCAUG` for RBFOX2) is provided in `config/priors.json`, the script scans the reference genome sequence within a narrow window (e.g., ±15nt) around the center of every final binding site. It returns the percentage of sites containing this exact motif.
 * **Biological Significance**: RNA-binding proteins usually bind to specific RNA sequence patterns. A peak caller should identify crosslink sites centered on these motifs. If the `motif_hit_rate` is low, the peaks might be shifted from the binding pocket (due to KDE bandwidth) or they might be noise.
 * **How it is used**: The Agent currently does *not* see this metric during its parameter search. It should be add to help the agent decision making in the future.
+
+### 4. Benchmark Overlap Metrics
+
+If a config contains a `benchmark` section, `run_scorers.py` also computes:
+
+* **`benchmark_region_overlap`**: Fraction of final binding sites overlapping provided top regions.
+* **`benchmark_region_recall`**: Fraction of provided top regions recovered by the final sites.
+* **`benchmark_crosslink_overlap`**: Fraction of final binding sites overlapping provided top crosslink sites.
+
+These metrics connect the agentic PureCLIP outputs to the local `data/*/top_*` benchmark summaries.

@@ -33,6 +33,8 @@ def test_snakemake_dry_run(tmp_path):
 
     # Create a dummy config pointing to these temporary files
     dummy_config = {
+        "run_id": "dry_run_iter_00",
+        "target_protein": "RBFOX2",
         "samples": {
             "ip": {
                 "rep1": {"bam": str(tmp_path / "results/ip_rep1/dedup.bam")},
@@ -50,10 +52,21 @@ def test_snakemake_dry_run(tmp_path):
             "bandwidth_nt": 50,
             "merge_distance_nt": 8,
             "high_precision_mode": False,
-            "use_input_covariate": False
+            "use_input_covariate": False,
+            "use_cl_motif_covariate": False,
+            "cl_motif_file": None
+        },
+        "postprocessing": {
+            "force_width": 9,
+            "cluster_gap_width": 8,
+            "min_region_length_nt": 3,
+            "min_crosslink_events": 3
         },
         "resources": {
             "threads": 1
+        },
+        "output": {
+            "results_dir": str(tmp_path / "workflow_results")
         }
     }
     

@@ -7,6 +7,8 @@ This directory contains the Snakemake bioinformatics pipeline responsible for pr
 - **`Snakefile`**: The core Snakemake pipeline. It handles PureCLIP execution and post-processing. The pipeline is designed to start directly from pre-processed, deduplicated BAM files, enabling iterative tuning by the Agent.
 - **`postprocess.py`**: A script called by Snakemake to filter and format the raw PureCLIP output. It enforces minimum crosslink events, minimum region lengths, and forces a specific footprint width (e.g., 9nt) as defined in the configuration.
 
+The workflow reads `output.results_dir` from the active YAML config. If that field is absent it falls back to `results/`.
+
 ---
 
 ## Detailed Pipeline Steps (Snakefile)
@@ -16,10 +18,12 @@ The `Snakefile` defines a Directed Acyclic Graph (DAG) of bioinformatics jobs fo
 ### Peak Calling (Runs Every Iteration)
 1. **`merge_ip`**: Merges the deduplicated BAM files from multiple biological replicates into a single "meta-replicate".
    * *Purpose*: Increases the statistical power and signal-to-noise ratio for the peak caller to find true binding sites.
-2. **`pureclip` (Merged)**: Runs the PureCLIP Hidden Markov Model on the merged BAM file to detect crosslink sites and binding regions based on the current Agent-tuned parameters (`bandwidth_nt`, `merge_distance_nt`).
-3. **`pureclip_per_replicate`**: Runs PureCLIP independently on each individual biological replicate.
+2. **`index_input_bam`**: Builds missing `.bam.bai` indexes for configured BAM inputs when needed.
+3. **`pureclip` (Merged)**: Runs the PureCLIP Hidden Markov Model on the merged BAM file to detect crosslink sites and binding regions based on the current Agent-tuned parameters (`bandwidth_nt`, `merge_distance_nt`).
+4. **`pureclip_per_replicate`**: Runs PureCLIP independently on each individual biological replicate.
    * *Purpose*: The outputs from individual replicates are used later by `run_scorers.py` to calculate `replicate_agreement` (reproducibility).
-4. **`postprocess`**: Executes `postprocess.py` to filter and format the merged PureCLIP regions into the final `binding_sites.reproducible.bed`.
+5. **`postprocess`**: Executes `postprocess.py` to filter and format the merged PureCLIP regions into the final `binding_sites.reproducible.bed`.
+6. **`score`**: Runs the scorer directly for standalone Snakemake runs. The agent also runs the scorer as its own graph node.
 
 ---
 

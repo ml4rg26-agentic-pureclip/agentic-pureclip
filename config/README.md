@@ -5,6 +5,7 @@ This directory stores all YAML and JSON configurations that define both the biol
 ## Files
 
 - **`run_config.yaml`** / **`run_config.test.yaml`**: The primary configuration for the Snakemake workflow. It contains dataset paths (BAMs), reference genome details, and the tunable sections (`pureclip`, `postprocessing`) that the Agent actively modifies.
+- **`datasets/*.yaml`**: Full-size local dataset configs wired to the ignored `data/` directory. These include BAM paths, reference FASTA paths, biological priors, output directories, and optional benchmark paths.
 - **`priors.json`**: Biological prior knowledge (e.g., target protein name, known motifs like "UGCAUG"). This is provided to the LLM as context for decision-making.
 - **`best_config.yaml`**: An artifact generated automatically at the end of the Agent loop, storing the best parameter set discovered during the run.
 
@@ -17,6 +18,9 @@ This YAML file dictates how the Snakemake workflow processes the data. Here are 
 ### 1. `samples` & `reference` (Inputs)
 * **`samples`**: Defines the experimental design. Contains paths to the `dedup.bam` files for the `ip` (Immunoprecipitation, usually multiple biological replicates) and `input_control` (size-matched input used as a covariate background model in PureCLIP).
 * **`reference`**: Paths to the `genome_fasta` (reference genome sequence) and `annotation_gtf` (gene models).
+* **`priors`**: Dataset-specific biological prior knowledge. When present, scorers and the agent prefer this over `config/priors.json`.
+* **`output`**: Controls reproducible output placement. `results_dir` is used by Snakemake and scorers. The agent additionally supports `results_root` + `use_run_id_subdir` to keep every iteration separate.
+* **`benchmark`**: Optional paths to provided top regions, top crosslink sites, top genes, and annotation summaries. The scorer uses available BED files to calculate benchmark overlap metrics.
 
 ### 2. `pureclip` & `postprocessing` (Tunable Parameters)
 These are the core fields that dictate peak calling and filtering. The **Agent actively modifies** a subset of these (defined in its `search_bounds`) to optimize the pipeline.

@@ -18,6 +18,15 @@ reference:
   genome_fasta: "ref/test_chr21.fa"
   annotation_gtf: "ref/test_chr21.gtf"
 
+priors:
+  target_protein: "RBFOX2"
+  clip_protocol: "eCLIP"
+  expected_footprint_width_nt: 9
+  known_motifs:
+    - pattern: "UGCAUG"
+      type: "target"
+  primary_objective_metric: "replicate_agreement"
+
 pureclip:
   bandwidth_nt: 50
   merge_distance_nt: 8
@@ -40,3 +49,8 @@ reproducibility:
 resources:
   max_memory_gb: 16
   threads: 8
+
+output:
+  results_root: "results/runs"
+  results_dir: "results/runs/test_rbfox2_iter_00"
+  use_run_id_subdir: true

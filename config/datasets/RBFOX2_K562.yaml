@@ -1,0 +1,54 @@
+run_id: RBFOX2_K562_iter_00
+dataset_id: RBFOX2_K562
+target_protein: RBFOX2
+cell_line: K562
+clip_protocol: eCLIP
+samples:
+  ip:
+    rep1:
+      bam: data/RBFOX2_K562/bam/ip_rep1_v1/ENCFF537RYR.bam
+    rep2:
+      bam: data/RBFOX2_K562/bam/ip_rep2_v1/ENCFF296GDR.bam
+  input_control:
+    rep1:
+      bam: data/RBFOX2_K562/bam/smi_v1/ENCFF212IIR.bam
+reference:
+  genome_fasta: data/GRCh38.primary_assembly.genome.fa/GRCh38.primary_assembly.genome.fa
+  annotation_gtf: null
+priors:
+  target_protein: RBFOX2
+  clip_protocol: eCLIP
+  expected_footprint_width_nt: 9
+  known_motifs:
+    - pattern: UGCAUG
+      type: target
+  primary_objective_metric: replicate_agreement
+pureclip:
+  bandwidth_nt: 50
+  merge_distance_nt: 8
+  high_precision_mode: false
+  use_input_covariate: true
+  use_cl_motif_covariate: false
+  cl_motif_file: null
+postprocessing:
+  force_width: 9
+  cluster_gap_width: 8
+  min_region_length_nt: 3
+  min_crosslink_events: 3
+reproducibility:
+  percentile_threshold: 10
+  min_crosslink_events_floor: 2
+  min_replicates_passing: 2
+benchmark:
+  top_regions_bed: data/RBFOX2_K562/top_regions/regions.bed6
+  top_crosslinks_bed: data/RBFOX2_K562/top_crosslink_sites/crosslinks.bed6
+  top_genes: data/RBFOX2_K562/top_genes/list.txt
+  biotypes_tsv: data/RBFOX2_K562/biotypes_genetypes/biotypes_proportions.tsv
+  genotypes_tsv: data/RBFOX2_K562/biotypes_genetypes/genetypes_proportions.tsv
+resources:
+  max_memory_gb: 16
+  threads: 8
+output:
+  results_root: results/datasets
+  results_dir: results/datasets/RBFOX2_K562
+  use_run_id_subdir: false
