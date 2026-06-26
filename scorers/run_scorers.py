@@ -9,7 +9,7 @@ import pandas as pd
 import yaml
 
 from agent.logging_config import setup_logger
-from pipeline.configs import workflow_paths
+from pipeline.configs import tunable_snapshot, workflow_paths
 from pipeline.motifs import (
     MotifPWM,
     iupac_to_regex,
@@ -425,9 +425,15 @@ def main(config_path, out_path):
         sites_bed, rep_region_files, genome_sizes, tmp_dir, observed_agreement
     )
 
+    try:
+        params = tunable_snapshot(cfg)
+    except (KeyError, TypeError):
+        params = None
+
     report = {
         "run_id": cfg["run_id"],
         "dataset_id": cfg.get("dataset_id"),
+        "params": params,
         "n_binding_sites": int(len(load_bed(sites_bed))),
         "replicate_agreement": observed_agreement,
         "replicate_agreement_expected": repro["expected"] if repro else None,
