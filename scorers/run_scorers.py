@@ -116,6 +116,100 @@ def replicate_agreement(sites_bed, rep_region_files, tmp_dir):
         return 0.0
 
 
+def _genome_sizes(genome_fasta, tmp_dir):
+    """Write a bedtools genome file (chrom\\tsize) from the FASTA .fai index."""
+    fai = f"{genome_fasta}.fai"
+    if not Path(fai).exists():
+        logger.warning("No .fai index for %s; cannot build chance background", genome_fasta)
+        return None
+    Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+    sizes = str(Path(tmp_dir) / "genome.sizes")
+    with open(fai) as handle, open(sizes, "w") as out:
+        for line in handle:
+            parts = line.split("\t")
+            if len(parts) >= 2:
+                out.write(f"{parts[0]}\t{parts[1]}\n")
+    return sizes
+
+
+def _shuffle_bed(valid_sites_bed, genome_sizes, tmp_dir, seed):
+    """Randomly reposition intervals, each kept on its own chromosome (-chrom)."""
+    out = str(Path(tmp_dir) / f"shuffled_{seed}.bed")
+    result = subprocess.run(
+        ["bedtools", "shuffle", "-i", valid_sites_bed, "-g", genome_sizes,
+         "-chrom", "-seed", str(seed)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        logger.error("bedtools shuffle failed: %s", result.stderr.strip())
+        return None
+    Path(out).write_text(result.stdout)
+    return out
+
+
+def replicate_reproducibility(sites_bed, rep_region_files, genome_sizes, tmp_dir,
+                              observed, n_shuffles=3):
+    """Chance-correct replicate agreement.
+
+    The raw agreement (fraction of sites overlapping every replicate's regions)
+    is inflated when sites are few and broad, because broad intervals overlap by
+    chance. We estimate that chance level by shuffling the sites (each kept on its
+    own chromosome) and re-measuring agreement, then report:
+
+      * expected   — mean agreement of shuffled sites
+      * enrichment — observed / expected
+      * score      — (observed - expected) / (1 - expected), clamped to [0, 1]
+
+    ``score`` is a chance-corrected, [0, 1]-bounded reproducibility that does not
+    reward collapsing to a handful of broad, trivially-overlapping sites.
+    """
+    if observed is None or genome_sizes is None:
+        return None
+    valid_sites, n = _write_valid_bed(sites_bed, "repro", tmp_dir)
+    if n == 0:
+        return {"observed": observed, "expected": None, "enrichment": None, "score": None}
+
+    expectations = []
+    for seed in range(1, n_shuffles + 1):
+        shuffled = _shuffle_bed(valid_sites, genome_sizes, tmp_dir, seed)
+        if shuffled is None:
+            continue
+        expectations.append(replicate_agreement(shuffled, rep_region_files, tmp_dir) or 0.0)
+    if not expectations:
+        return {"observed": observed, "expected": None, "enrichment": None, "score": None}
+
+    expected = round(sum(expectations) / len(expectations), 4)
+    enrichment = round(observed / expected, 4) if expected > 0 else None
+    score = (observed - expected) / (1 - expected) if expected < 1 else 0.0
+    score = round(max(0.0, min(1.0, score)), 4)
+    logger.info(
+        "Reproducibility: observed=%.4f expected=%.4f enrichment=%s score=%.4f",
+        observed, expected, enrichment, score,
+    )
+    return {"observed": observed, "expected": expected, "enrichment": enrichment, "score": score}
+
+
+def _analyzed_chroms(cfg):
+    """Chromosomes the pipeline actually called sites on (for fair benchmarking)."""
+    if cfg.get("pureclip", {}).get("learn_on_chr21"):
+        return ["chr21"]
+    return None
+
+
+def _restrict_bed_to_chroms(bed_path, chroms, tmp_dir, tag):
+    """Subset a BED to the given chromosomes; return original path if no restriction."""
+    if not chroms:
+        return bed_path
+    chromset = set(chroms)
+    Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+    out = str(Path(tmp_dir) / f"ref_{tag}.bed")
+    with open(bed_path) as handle, open(out, "w") as target:
+        for line in handle:
+            if line.split("\t", 1)[0] in chromset:
+                target.write(line)
+    return out
+
+
 def _iupac_to_regex(motif):
     iupac = {
         "U": "T",
@@ -324,29 +418,40 @@ def main(config_path, out_path):
         best_motif_rate = max(motif_hit_rates.values()) if motif_hit_rates else None
         best_enrichment = None
 
+    # ── Reproducibility (chance-corrected) ───────────────────────────
+    genome_sizes = _genome_sizes(genome, tmp_dir)
+    observed_agreement = replicate_agreement(sites_bed, rep_region_files, tmp_dir)
+    repro = replicate_reproducibility(
+        sites_bed, rep_region_files, genome_sizes, tmp_dir, observed_agreement
+    )
+
     report = {
         "run_id": cfg["run_id"],
         "dataset_id": cfg.get("dataset_id"),
         "n_binding_sites": int(len(load_bed(sites_bed))),
-        "replicate_agreement": replicate_agreement(sites_bed, rep_region_files, tmp_dir),
+        "replicate_agreement": observed_agreement,
+        "replicate_agreement_expected": repro["expected"] if repro else None,
+        "reproducibility_enrichment": repro["enrichment"] if repro else None,
+        "reproducibility_score": repro["score"] if repro else None,
         "motif_hit_rate": best_motif_rate,
         "motif_enrichment": best_enrichment,
         "motif_hit_rates_detail": motif_hit_rates if motif_hit_rates else None,
         "motif_enrichments_detail": motif_enrichments if motif_enrichments else None,
     }
 
+    # ── Benchmark vs ENCODE reference, restricted to analyzed chromosomes ──
+    # Under chr21 fast mode the genome-wide reference would cap recall at the
+    # fraction of reference regions on chr21 (~4.5%), making it meaningless.
     benchmark = cfg.get("benchmark") or {}
+    chroms = _analyzed_chroms(cfg)
     if benchmark.get("top_regions_bed"):
-        report["benchmark_region_overlap"] = overlap_fraction(
-            sites_bed, benchmark["top_regions_bed"], tmp_dir
-        )
-        report["benchmark_region_recall"] = overlap_fraction(
-            benchmark["top_regions_bed"], sites_bed, tmp_dir
-        )
+        ref = _restrict_bed_to_chroms(benchmark["top_regions_bed"], chroms, tmp_dir, "regions")
+        report["benchmark_region_overlap"] = overlap_fraction(sites_bed, ref, tmp_dir)
+        report["benchmark_region_recall"] = overlap_fraction(ref, sites_bed, tmp_dir)
     if benchmark.get("top_crosslinks_bed"):
-        report["benchmark_crosslink_overlap"] = overlap_fraction(
-            sites_bed, benchmark["top_crosslinks_bed"], tmp_dir
-        )
+        refx = _restrict_bed_to_chroms(benchmark["top_crosslinks_bed"], chroms, tmp_dir, "xlinks")
+        report["benchmark_crosslink_overlap"] = overlap_fraction(sites_bed, refx, tmp_dir)
+        report["benchmark_crosslink_recall"] = overlap_fraction(refx, sites_bed, tmp_dir)
 
     with open(out_path, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2)
