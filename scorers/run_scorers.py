@@ -1,4 +1,5 @@
 import json
+import random
 import re
 import subprocess
 import sys
@@ -9,6 +10,12 @@ import yaml
 
 from agent.logging_config import setup_logger
 from pipeline.configs import workflow_paths
+from pipeline.motifs import (
+    MotifPWM,
+    iupac_to_regex,
+    load_all_motifs,
+    scan_sequence_with_pwm,
+)
 
 
 logger = setup_logger("scorer")
@@ -127,10 +134,14 @@ def _iupac_to_regex(motif):
     return "".join(iupac.get(base, base) for base in motif.upper())
 
 
-def motif_hit_rate(sites_bed, genome_fasta, motif_pattern, flank_nt=15, tmp_dir=None):
+def _extract_flanking_sequences(sites_bed, genome_fasta, flank_nt=15, tmp_dir=None):
+    """Extract flanking sequences around binding sites using bedtools getfasta.
+
+    Returns list of uppercase DNA sequences.
+    """
     sites = load_bed(sites_bed)
     if len(sites) == 0:
-        return 0.0
+        return []
 
     expanded = sites.copy()
     expanded["start"] = (expanded["start"] - flank_nt).clip(lower=0)
@@ -153,17 +164,82 @@ def motif_hit_rate(sites_bed, genome_fasta, motif_pattern, flank_nt=15, tmp_dir=
     )
     if result.returncode != 0:
         logger.error("bedtools getfasta failed: %s", result.stderr.strip())
-        return None
+        return []
 
     seqs = [line.split("\t")[1].upper() for line in result.stdout.strip().split("\n") if line]
+    return seqs
+
+
+def motif_hit_rate(sites_bed, genome_fasta, motif_pattern, flank_nt=15, tmp_dir=None):
+    """Calculate motif hit rate using IUPAC regex (legacy method).
+
+    For PWM-based scoring, use motif_hit_rate_pwm() instead.
+    """
+    seqs = _extract_flanking_sequences(sites_bed, genome_fasta, flank_nt, tmp_dir)
     if not seqs:
         return 0.0
 
-    rx = re.compile(_iupac_to_regex(motif_pattern))
+    rx = re.compile(iupac_to_regex(motif_pattern))
     hits = sum(1 for seq in seqs if rx.search(seq))
     rate = round(hits / len(seqs), 4)
-    logger.info("Motif hit rate (window +/-%d nt): %d/%d = %.4f", flank_nt, hits, len(seqs), rate)
+    logger.info("Motif hit rate (IUPAC, window +/-%d nt): %d/%d = %.4f", flank_nt, hits, len(seqs), rate)
     return rate
+
+
+def _pwm_hit_rate(seqs: list[str], pwm: MotifPWM, threshold: float) -> float:
+    """Fraction of sequences with at least one PWM log-odds hit >= threshold."""
+    if not seqs:
+        return 0.0
+    hits = sum(1 for seq in seqs if scan_sequence_with_pwm(seq, pwm, threshold))
+    return round(hits / len(seqs), 4)
+
+
+def _shuffled_sequences(seqs: list[str], seed: int = 0) -> list[str]:
+    """Per-sequence character shuffle, preserving each window's base composition.
+
+    Provides a background that controls for the local nucleotide content of the
+    binding-site windows, so a motif hit rate can be turned into an enrichment.
+    """
+    rng = random.Random(seed)
+    shuffled = []
+    for seq in seqs:
+        chars = list(seq)
+        rng.shuffle(chars)
+        shuffled.append("".join(chars))
+    return shuffled
+
+
+def motif_hit_rate_pwm(
+    sites_bed,
+    genome_fasta,
+    pwms: list[MotifPWM],
+    flank_nt=15,
+    tmp_dir=None,
+    threshold_pct=0.80,
+) -> dict[str, float]:
+    """Calculate motif hit rate using PWM log-odds scoring.
+
+    For each PWM, extracts flanking sequences around binding sites and
+    reports the fraction of sites containing a motif hit above threshold.
+
+    Returns dict of motif_id -> hit_rate.
+    """
+    seqs = _extract_flanking_sequences(sites_bed, genome_fasta, flank_nt, tmp_dir)
+    if not seqs:
+        return {}
+
+    results: dict[str, float] = {}
+    for pwm in pwms:
+        threshold = pwm.match_threshold(threshold_pct)
+        rate = _pwm_hit_rate(seqs, pwm, threshold)
+        motif_label = pwm.motif_id or pwm.consensus
+        logger.info(
+            "Motif hit rate (PWM %s, window +/-%d nt, thresh_pct=%.2f): %.4f",
+            motif_label, flank_nt, threshold_pct, rate,
+        )
+        results[motif_label] = rate
+
+    return results
 
 
 def _load_priors(cfg):
@@ -186,21 +262,77 @@ def main(config_path, out_path):
     ip_reps = list(cfg["samples"]["ip"].keys())
     rep_region_files = [f"{paths['results_dir']}/ip_{rep}/pureclip_regions.bed" for rep in ip_reps]
 
-    target_motif = next(
-        (motif["pattern"] for motif in priors.get("known_motifs", []) if motif["type"] == "target"),
-        None,
-    )
+    target_protein = cfg.get("target_protein", priors.get("target_protein", ""))
+    cell_line = cfg.get("cell_line")
+
+    # ── Motif scoring ─────────────────────────────────────────────────
+    known_motifs = priors.get("known_motifs", [])
+    target_motifs = [m for m in known_motifs if m.get("type") == "target"]
+
+    # Extract binding-site windows once and build a composition-matched
+    # background so hit rates can be reported as enrichment over chance.
+    seqs = _extract_flanking_sequences(sites_bed, genome, flank_nt=15, tmp_dir=tmp_dir)
+    bg_seqs = _shuffled_sequences(seqs)
+
+    motif_hit_rates: dict[str, float] = {}
+    motif_enrichments: dict[str, float] = {}
+
+    # Try PWM log-odds scoring via motif databases
+    all_pwm_motifs = load_all_motifs(target_protein, cell_line)
+    if all_pwm_motifs and seqs:
+        run_logger.info(
+            "Found motif databases for %s: %s",
+            target_protein,
+            list(all_pwm_motifs.keys()),
+        )
+        for db, entries in all_pwm_motifs.items():
+            for entry in entries:
+                pwm = entry.pwm
+                if pwm is None:
+                    continue
+                label = pwm.motif_id or pwm.consensus
+                threshold = pwm.match_threshold(0.80)
+                fg = _pwm_hit_rate(seqs, pwm, threshold)
+                bg = _pwm_hit_rate(bg_seqs, pwm, threshold)
+                motif_hit_rates[label] = fg
+                motif_enrichments[label] = round(fg / bg, 4) if bg > 0 else None
+                run_logger.info(
+                    "Motif %s (%s): hit_rate=%.4f background=%.4f enrichment=%s",
+                    label, db, fg, bg, motif_enrichments[label],
+                )
+
+    # Fallback to IUPAC regex if no PWMs are available
+    if not motif_hit_rates:
+        for motif in target_motifs:
+            pattern = motif.get("pattern")
+            if pattern:
+                rate = motif_hit_rate(
+                    sites_bed, genome, pattern, flank_nt=15, tmp_dir=tmp_dir,
+                )
+                motif_hit_rates[pattern] = rate
+
+    # Aggregate signals for the agent: report the most enriched motif's rate so a
+    # single common-but-uninformative motif cannot dominate the headline number.
+    if motif_enrichments and any(v is not None for v in motif_enrichments.values()):
+        best_label = max(
+            (k for k, v in motif_enrichments.items() if v is not None),
+            key=lambda k: motif_enrichments[k],
+        )
+        best_motif_rate = motif_hit_rates[best_label]
+        best_enrichment = motif_enrichments[best_label]
+    else:
+        best_motif_rate = max(motif_hit_rates.values()) if motif_hit_rates else None
+        best_enrichment = None
 
     report = {
         "run_id": cfg["run_id"],
         "dataset_id": cfg.get("dataset_id"),
         "n_binding_sites": int(len(load_bed(sites_bed))),
         "replicate_agreement": replicate_agreement(sites_bed, rep_region_files, tmp_dir),
-        "motif_hit_rate": (
-            motif_hit_rate(sites_bed, genome, target_motif, flank_nt=15, tmp_dir=tmp_dir)
-            if target_motif
-            else None
-        ),
+        "motif_hit_rate": best_motif_rate,
+        "motif_enrichment": best_enrichment,
+        "motif_hit_rates_detail": motif_hit_rates if motif_hit_rates else None,
+        "motif_enrichments_detail": motif_enrichments if motif_enrichments else None,
     }
 
     benchmark = cfg.get("benchmark") or {}
