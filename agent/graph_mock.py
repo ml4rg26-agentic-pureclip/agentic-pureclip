@@ -17,9 +17,9 @@ load_dotenv()
 
 from langgraph.graph import StateGraph, START, END
 try:
-    from langchain_google_genai import ChatGoogleGenerativeAI
+    from langchain_openai import ChatOpenAI
 except ImportError:
-    ChatGoogleGenerativeAI = None
+    ChatOpenAI = None
 from agent.state import AgentState, IterationRecord
 from agent.logging_config import setup_logger
 
@@ -38,8 +38,13 @@ SCORE_MODE = os.environ.get("MOCK_SCORE_MODE", "plateau")
 CONFIG_PATH = "config/run_config.yaml"
 REPORT_PATH = "results/score_report.json"
 
-if USE_GEMINI and ChatGoogleGenerativeAI is not None:
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.2)
+if USE_GEMINI and ChatOpenAI is not None:
+    llm = ChatOpenAI(
+        model="deepseek-chat",
+        temperature=0.2,
+        base_url="https://api.deepseek.com/v1",
+        api_key=os.environ.get("DEEPSEEK_API_KEY", ""),
+    )
 else:
     llm = None
 
@@ -118,7 +123,7 @@ def agent_decide(state: AgentState) -> dict:
 
     if USE_GEMINI:
         if llm is None:
-            raise RuntimeError("USE_GEMINI=1 but langchain_google_genai is not installed")
+            raise RuntimeError("USE_GEMINI=1 but langchain_openai is not installed")
         prompt = f"""You are optimising PureCLIP parameters for eCLIP data.
 
 PRIOR KNOWLEDGE:

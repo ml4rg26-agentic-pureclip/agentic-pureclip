@@ -3,10 +3,16 @@ import json
 import os
 
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
-from agent.decisions import build_decision_prompt, parse_decision_response, validated_next_config
+from agent.decisions import (
+    DEFAULT_MOTIF_WEIGHT,
+    build_decision_prompt,
+    composite_objective,
+    parse_decision_response,
+    validated_next_config,
+)
 from agent.logging_config import setup_logger
 from agent.state import AgentState, IterationRecord
 from pipeline.configs import (
@@ -25,7 +31,12 @@ load_dotenv()
 
 logger = setup_logger("agent_graph", "results/logs/agent_graph.log")
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.2)
+llm = ChatOpenAI(
+    model="deepseek-chat",
+    temperature=0.2,
+    base_url="https://api.deepseek.com/v1",
+    api_key=os.environ.get("DEEPSEEK_API_KEY", ""),
+)
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "config/run_config.yaml")
 
@@ -63,9 +74,17 @@ def agent_decide(state: AgentState) -> dict:
     logger.info("Agent is deciding on next config")
     with open(score_report_path(state["current_config"]), "r", encoding="utf-8") as handle:
         report = json.load(handle)
-    objective = report.get(state["objective_metric"]) or 0.0
+    motif_weight = float(state["priors"].get("motif_weight", DEFAULT_MOTIF_WEIGHT))
+    objective = composite_objective(report, motif_weight)
+    logger.info(
+        "Scores: agreement=%s motif_hit_rate=%s composite=%.4f (best so far=%.4f)",
+        report.get("replicate_agreement"),
+        report.get("motif_hit_rate"),
+        objective,
+        state["best_score"],
+    )
 
-    resp = llm.invoke(build_decision_prompt(state, report))
+    resp = llm.invoke(build_decision_prompt(state, report, motif_weight))
     try:
         decision = parse_decision_response(resp.content)
     except (json.JSONDecodeError, ValueError):
@@ -117,7 +136,7 @@ def finalize(state: AgentState) -> dict:
         else "Converged: no improvement"
     )
     save_config(state["best_config"], "config/best_config.yaml")
-    logger.info("DONE. %s. Best %s=%.4f", reason, state["objective_metric"], state["best_score"])
+    logger.info("DONE. %s. Best composite score=%.4f", reason, state["best_score"])
     return {"termination_reason": reason}
 
 
