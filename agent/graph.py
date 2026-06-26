@@ -17,6 +17,7 @@ from agent.logging_config import setup_logger
 from agent.state import AgentState, IterationRecord
 from pipeline.configs import (
     DEFAULT_SEARCH_BOUNDS,
+    ConfigValidationError,
     load_config,
     save_config,
     score_report_path,
@@ -39,6 +40,10 @@ llm = ChatOpenAI(
 )
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "config/run_config.yaml")
+
+# How many times to re-prompt the LLM when it proposes a repeated/out-of-bounds
+# parameter set before giving up and converging gracefully.
+MAX_DECISION_RETRIES = 3
 
 
 def _with_iteration_output(config: dict) -> dict:
@@ -70,6 +75,36 @@ def run_scorers(state: AgentState) -> dict:
     return {}
 
 
+def _propose_next_config(state: AgentState, report: dict, motif_weight: float):
+    """Ask the LLM for a novel, valid next config.
+
+    The search space is small and the LLM may repeat a tried parameter set or
+    stray out of bounds. Rather than crashing the whole run, retry with the
+    rejection reason fed back into the prompt. Returns ``(decision, new_config)``;
+    ``new_config`` is ``None`` if no novel valid set was found.
+    """
+    feedback = None
+    decision = None
+    for attempt in range(1, MAX_DECISION_RETRIES + 1):
+        resp = llm.invoke(build_decision_prompt(state, report, motif_weight, feedback))
+        try:
+            decision = parse_decision_response(resp.content)
+        except (json.JSONDecodeError, ValueError) as exc:
+            feedback = f"The response was not valid JSON ({exc}). Respond with ONLY the JSON object."
+            logger.warning("Decision parse failed (attempt %d/%d): %s", attempt, MAX_DECISION_RETRIES, exc)
+            continue
+        try:
+            return decision, validated_next_config(state, decision)
+        except ConfigValidationError as exc:
+            feedback = (
+                f"{exc}. The new parameter set must differ from every set already tried "
+                "and stay within the search bounds. Change a different parameter, "
+                "or change it by a different amount."
+            )
+            logger.warning("Decision rejected (attempt %d/%d): %s", attempt, MAX_DECISION_RETRIES, exc)
+    return decision, None
+
+
 def agent_decide(state: AgentState) -> dict:
     logger.info("Agent is deciding on next config")
     with open(score_report_path(state["current_config"]), "r", encoding="utf-8") as handle:
@@ -84,30 +119,37 @@ def agent_decide(state: AgentState) -> dict:
         state["best_score"],
     )
 
-    resp = llm.invoke(build_decision_prompt(state, report, motif_weight))
-    try:
-        decision = parse_decision_response(resp.content)
-    except (json.JSONDecodeError, ValueError):
-        logger.error("Failed to parse LLM response as JSON. Raw response:\n%s", resp.content)
-        raise
-
-    logger.info("Agent decision reasoning: %s", decision["reasoning"])
-
-    new_config = validated_next_config(state, decision)
-    new_config["run_id"] = f"{state['priors']['target_protein']}_iter_{state['current_iteration'] + 1:02d}"
-    new_config = _with_iteration_output(new_config)
-
     improved = objective > state["best_score"] + state["score_improvement_threshold"]
     best_score = objective if improved else state["best_score"]
     best_config = state["current_config"] if improved else state["best_config"]
-    streak = 0 if improved else state["no_improvement_streak"] + 1
+
+    decision, new_config = _propose_next_config(state, report, motif_weight)
 
     record: IterationRecord = {
         "iteration": state["current_iteration"],
         "config": tunable_snapshot(state["current_config"]),
         "scores": report,
-        "reasoning": decision["reasoning"],
+        "reasoning": decision["reasoning"] if decision else "No valid novel parameter set could be proposed.",
     }
+
+    if new_config is None:
+        # Search exhausted: stop gracefully instead of crashing the run.
+        logger.warning(
+            "No novel valid parameter set after %d attempts; converging.", MAX_DECISION_RETRIES
+        )
+        return {
+            "current_config": state["current_config"],
+            "current_iteration": state["current_iteration"] + 1,
+            "history": [record],
+            "best_score": best_score,
+            "best_config": best_config,
+            "no_improvement_streak": state["patience"],  # trip the convergence stop
+        }
+
+    logger.info("Agent decision reasoning: %s", decision["reasoning"])
+    new_config["run_id"] = f"{state['priors']['target_protein']}_iter_{state['current_iteration'] + 1:02d}"
+    new_config = _with_iteration_output(new_config)
+    streak = 0 if improved else state["no_improvement_streak"] + 1
 
     return {
         "current_config": new_config,

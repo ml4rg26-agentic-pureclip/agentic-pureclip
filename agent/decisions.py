@@ -61,11 +61,18 @@ def build_decision_prompt(
     state: dict[str, Any],
     report: dict[str, Any],
     motif_weight: float = DEFAULT_MOTIF_WEIGHT,
+    feedback: str | None = None,
 ) -> str:
     priors = state["current_config"].get("priors") or state["priors"]
     progress = _progress_rows(state, motif_weight)
     current_composite = round(composite_objective(report, motif_weight), 4)
-    return f"""You are optimising PureCLIP parameters for eCLIP data.
+    feedback_block = (
+        f"\nIMPORTANT — your previous answer was rejected:\n{feedback}\n"
+        "Propose a DIFFERENT change that fixes this.\n"
+        if feedback
+        else ""
+    )
+    return f"""You are optimising PureCLIP parameters for eCLIP data.{feedback_block}
 
 Your goal is to MAXIMISE the COMPOSITE quality score, defined as:
     composite = {1 - motif_weight:.2f} * replicate_agreement + {motif_weight:.2f} * motif_hit_rate
