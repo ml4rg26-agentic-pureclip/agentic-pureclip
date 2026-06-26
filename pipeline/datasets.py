@@ -1,20 +1,31 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from pipeline.motifs import (
+    MotifEntry,
+    available_databases,
+    get_best_motif,
+    load_all_motifs,
+)
 
 
 GENOME_FASTA = "data/GRCh38.primary_assembly.genome.fa/GRCh38.primary_assembly.genome.fa"
 
-KNOWN_MOTIFS = {
+# Hardcoded fallback motifs when no PWM database is available
+FALLBACK_MOTIFS: dict[str, list[dict[str, str]]] = {
     "RBFOX2": [{"pattern": "UGCAUG", "type": "target"}],
     "QKI": [{"pattern": "ACUAAY", "type": "target"}],
     "PUM1": [{"pattern": "UGUANAUA", "type": "target"}],
 }
 
+# Alias for backward compatibility
+KNOWN_MOTIFS = FALLBACK_MOTIFS
 
-@dataclass(frozen=True)
+
+@dataclass
 class DatasetSpec:
     name: str
     target_protein: str
@@ -27,6 +38,8 @@ class DatasetSpec:
     top_genes: str | None = None
     biotypes_tsv: str | None = None
     genotypes_tsv: str | None = None
+    # Motif database preferences
+    motif_databases: list[str] = field(default_factory=lambda: ["mCrossBase", "ATtRACT", "CISBP-RNA"])
 
 
 DATASETS: dict[str, DatasetSpec] = {
@@ -47,14 +60,14 @@ DATASETS: dict[str, DatasetSpec] = {
         name="RBFOX2_HepG2",
         target_protein="RBFOX2",
         cell_line="HepG2",
-        ip_rep1_bam="data/RBFOX2_HepG2/RBFOX2_HepG2/bam/ip_rep1_v1/ENCFF239CML.bam",
-        ip_rep2_bam="data/RBFOX2_HepG2/RBFOX2_HepG2/bam/ip_rep2_v1/ENCFF170YQV.bam",
-        input_bam="data/RBFOX2_HepG2/RBFOX2_HepG2/bam/smi_v1/ENCFF515BTB.bam",
-        top_regions_bed="data/RBFOX2_HepG2/RBFOX2_HepG2/top_regions/regions.bed6",
-        top_crosslinks_bed="data/RBFOX2_HepG2/RBFOX2_HepG2/top_crosslink_sites/crosslinks.bed6",
-        top_genes="data/RBFOX2_HepG2/RBFOX2_HepG2/top_genes/list.txt",
-        biotypes_tsv="data/RBFOX2_HepG2/RBFOX2_HepG2/biotypes_genetypes/biotypes_proportions.tsv",
-        genotypes_tsv="data/RBFOX2_HepG2/RBFOX2_HepG2/biotypes_genetypes/genetypes_proportions.tsv",
+        ip_rep1_bam="data/RBFOX2_HepG2/bam/ip_rep1_v1/ENCFF239CML.bam",
+        ip_rep2_bam="data/RBFOX2_HepG2/bam/ip_rep2_v1/ENCFF170YQV.bam",
+        input_bam="data/RBFOX2_HepG2/bam/smi_v1/ENCFF515BTB.bam",
+        top_regions_bed="data/RBFOX2_HepG2/top_regions/regions.bed6",
+        top_crosslinks_bed="data/RBFOX2_HepG2/top_crosslink_sites/crosslinks.bed6",
+        top_genes="data/RBFOX2_HepG2/top_genes/list.txt",
+        biotypes_tsv="data/RBFOX2_HepG2/biotypes_genetypes/biotypes_proportions.tsv",
+        genotypes_tsv="data/RBFOX2_HepG2/biotypes_genetypes/genetypes_proportions.tsv",
     ),
     "QKI_K562": DatasetSpec(
         name="QKI_K562",
@@ -118,6 +131,47 @@ def get_dataset(name: str) -> DatasetSpec:
         raise KeyError(f"Unknown dataset {name!r}. Available datasets: {available}") from exc
 
 
+def _resolve_motifs(
+    target_protein: str,
+    cell_line: str | None = None,
+    databases: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Resolve known motifs for a target protein.
+
+    Priority:
+    1. Load PWMs from available motif databases (e.g. mCrossBase)
+    2. Fall back to hardcoded IUPAC consensus
+    """
+    db_list = databases or ["mCrossBase", "ATtRACT", "CISBP-RNA"]
+    available_dbs = set(available_databases())
+
+    resolved: list[dict[str, Any]] = []
+
+    for db in db_list:
+        if db not in available_dbs:
+            continue
+        all_for_rbp = load_all_motifs(target_protein, cell_line, databases=[db])
+        if db in all_for_rbp:
+            for entry in all_for_rbp[db]:
+                motif_dict: dict[str, Any] = {
+                    "pattern": entry.pattern,
+                    "type": entry.type,
+                    "source_database": db,
+                }
+                if entry.pwm is not None:
+                    motif_dict["motif_id"] = entry.pwm.motif_id
+                    motif_dict["consensus"] = entry.pwm.consensus
+                resolved.append(motif_dict)
+            break  # Use the first database that has data
+
+    if not resolved:
+        # Fallback to hardcoded
+        fallback = FALLBACK_MOTIFS.get(target_protein, [])
+        resolved = [dict(m) for m in fallback]
+
+    return resolved
+
+
 def dataset_to_config(
     name: str,
     *,
@@ -138,6 +192,12 @@ def dataset_to_config(
         }.items()
         if value
     }
+
+    known_motifs = _resolve_motifs(
+        spec.target_protein,
+        cell_line=spec.cell_line,
+        databases=spec.motif_databases,
+    )
 
     return {
         "run_id": run_id,
@@ -162,7 +222,7 @@ def dataset_to_config(
             "target_protein": spec.target_protein,
             "clip_protocol": "eCLIP",
             "expected_footprint_width_nt": 9,
-            "known_motifs": KNOWN_MOTIFS.get(spec.target_protein, []),
+            "known_motifs": known_motifs,
             "primary_objective_metric": "replicate_agreement",
         },
         "pureclip": {
