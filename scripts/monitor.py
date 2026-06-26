@@ -189,12 +189,31 @@ def _strip_iter(run_id: str) -> str:
     return ITER_RE.sub("", run_id or "").rstrip("_") or run_id
 
 
+def _result_roots() -> list[Path]:
+    """Result roots to scan: live runs, batch runs, and each overnight job dir."""
+    roots = list(RESULT_ROOTS)
+    overnight = Path("results/overnight")
+    if overnight.exists():
+        roots += [d for d in overnight.iterdir() if d.is_dir()]
+    return roots
+
+
+def _source_label(root: Path) -> str:
+    parts = root.parts
+    if "overnight" in parts:
+        return "overnight"
+    if root.name == "batch":
+        return "batch"
+    return "live"
+
+
 def collect_experiments() -> list[dict]:
     """Group every score_report.json by dataset into iteration trajectories."""
     rows = []
-    for root in RESULT_ROOTS:
+    for root in _result_roots():
         if not root.exists():
             continue
+        source = _source_label(root)
         for report in root.glob("*/score_report.json"):
             try:
                 d = json.loads(report.read_text())
@@ -215,7 +234,7 @@ def collect_experiments() -> list[dict]:
                 "enrichment": d.get("motif_enrichment"),
                 "recall": d.get("benchmark_region_recall"),
                 "composite": round(comp, 4) if comp is not None else None,
-                "source": root.name,
+                "source": source,
                 "mtime": report.stat().st_mtime,
             })
 
@@ -354,6 +373,7 @@ HTML = r"""<!DOCTYPE html>
   .badge-idle { background:rgba(139,148,158,0.16); color:var(--muted); }
   .badge-live { background:rgba(63,185,80,0.14); color:var(--green); }
   .badge-batch { background:rgba(188,140,255,0.14); color:var(--purple); }
+  .badge-overnight { background:rgba(210,153,29,0.16); color:var(--yellow); }
   .empty { color:var(--muted); font-style:italic; padding:10px; }
 
   /* active run card */
@@ -514,6 +534,8 @@ function renderExperiments(exps){
       const isBest = it.run_id===g.best_run;
       const srcBadge = it.source==='batch'
         ? '<span class="badge badge-batch src">batch</span>'
+        : it.source==='overnight'
+        ? '<span class="badge badge-overnight src">overnight</span>'
         : '<span class="badge badge-live src">live</span>';
       const repro = (it.reproducibility!==null&&it.reproducibility!==undefined) ? it.reproducibility : it.agreement;
       html += `<tr class="${isBest?'best':''}">
