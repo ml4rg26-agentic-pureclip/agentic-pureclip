@@ -104,7 +104,13 @@ def build_job_config(job: dict, defaults: dict, pass_idx: int):
         "use_run_id_subdir": True,
     }
     max_iter = int(job.get("max_iter", defaults.get("max_iter", 5)))
-    return job_id, cfg, max_iter, results_root, weights
+    optimizer = (job.get("optimizer") or defaults.get("optimizer") or "llm").lower()
+    return job_id, cfg, max_iter, results_root, weights, optimizer
+
+
+# Entry script per optimizer; both read CONFIG_PATH + MAX_ITER and write the
+# same per-iteration score reports.
+OPTIMIZER_SCRIPTS = {"llm": "agent/graph.py", "optuna": "agent/optuna_runner.py"}
 
 
 def data_present(cfg: dict):
@@ -148,7 +154,8 @@ def _log_tail(path: Path, n_lines: int = 40) -> str:
 
 # ── result collection ───────────────────────────────────────────────────────
 
-def collect_iterations(results_root: str, job_id: str, dataset: str, weights: dict) -> list[dict]:
+def collect_iterations(results_root: str, job_id: str, dataset: str, weights: dict,
+                       optimizer: str = "llm") -> list[dict]:
     root = ROOT / results_root
     records = []
     if not root.exists():
@@ -163,6 +170,7 @@ def collect_iterations(results_root: str, job_id: str, dataset: str, weights: di
             "type": "iteration",
             "job_id": job_id,
             "dataset": dataset,
+            "optimizer": optimizer,
             "run_id": d.get("run_id"),
             "iteration": _iter_index(d.get("run_id", "")),
             "n_binding_sites": d.get("n_binding_sites"),
@@ -186,11 +194,13 @@ def collect_iterations(results_root: str, job_id: str, dataset: str, weights: di
 def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
     """Run a single optimisation job in an isolated subprocess. Never raises."""
     started = time.time()
-    job_id, cfg, max_iter, results_root, weights = build_job_config(job, defaults, pass_idx)
+    job_id, cfg, max_iter, results_root, weights, optimizer = build_job_config(job, defaults, pass_idx)
+    script = OPTIMIZER_SCRIPTS.get(optimizer, OPTIMIZER_SCRIPTS["llm"])
     record = {
         "type": "job",
         "job_id": job_id,
         "dataset": job["dataset"],
+        "optimizer": optimizer,
         "pass": pass_idx,
         "max_iter": max_iter,
         "weights": weights,
@@ -218,14 +228,14 @@ def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
     if extra_path:
         env["PATH"] = f"{extra_path}:{env.get('PATH', '')}"
 
-    print(f"[overnight] START {job_id} ({job['dataset']}, max_iter={max_iter}, "
-          f"timeout={int(job_timeout_s)}s)", flush=True)
+    print(f"[overnight] START {job_id} ({job['dataset']}, optimizer={optimizer}, "
+          f"max_iter={max_iter}, timeout={int(job_timeout_s)}s)", flush=True)
 
     status, exit_code = "completed", None
     try:
         with open(log_path, "w", encoding="utf-8") as logf:
             proc = subprocess.Popen(
-                [sys.executable, "agent/graph.py"],
+                [sys.executable, script],
                 cwd=str(ROOT), env=env, stdout=logf, stderr=subprocess.STDOUT,
                 start_new_session=True,  # own process group so we can kill the whole tree
             )
@@ -244,7 +254,7 @@ def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
 
     # Always try to collect whatever iterations were scored, even on failure.
     try:
-        iterations = collect_iterations(results_root, job_id, job["dataset"], weights)
+        iterations = collect_iterations(results_root, job_id, job["dataset"], weights, optimizer)
     except Exception:
         iterations = []
 
@@ -291,7 +301,7 @@ def _terminate_tree(proc):
 # ── driver ──────────────────────────────────────────────────────────────────
 
 def write_summary(jobs_records: list[dict], path: Path) -> None:
-    cols = ["job_id", "dataset", "pass", "status", "failure_hint", "best_composite",
+    cols = ["job_id", "dataset", "optimizer", "pass", "status", "failure_hint", "best_composite",
             "iterations_scored", "max_iter", "exit_code", "duration_s"]
     with open(path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=cols, extrasaction="ignore")
@@ -324,9 +334,9 @@ def main():
     if args.dry_run:
         print(f"Plan: {len(jobs)} jobs, budget {args.hours}h, repeat={not args.no_repeat}\n")
         for job in jobs:
-            _id, cfg, max_iter, root, weights = build_job_config(job, defaults, 0)
+            _id, cfg, max_iter, root, weights, optimizer = build_job_config(job, defaults, 0)
             ok, reason = data_present(cfg)
-            print(f"  {_id:22s} {job['dataset']:14s} max_iter={max_iter} "
+            print(f"  {_id:24s} {job['dataset']:14s} optimizer={optimizer:6s} max_iter={max_iter} "
                   f"data={'OK' if ok else 'MISSING (' + reason + ')'}")
         return
 
