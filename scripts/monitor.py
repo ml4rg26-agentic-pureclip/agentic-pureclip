@@ -116,6 +116,15 @@ def get_active_run(procs: list[dict], cfg: dict) -> dict:
     joined = " ".join(p["args"] for p in procs)
     is_active = bool(procs)
 
+    # Which optimizer is driving the loop?
+    if "optuna_runner.py" in joined:
+        optimizer = "optuna"
+    elif any(k in joined for k in ("agent/graph.py", "agent.graph")):
+        optimizer = "llm"
+    else:
+        optimizer = None
+    decide_label = "TPE suggest" if optimizer == "optuna" else "LLM decide"
+
     if "pureclip2" in joined:
         stage, idx = "PureCLIP", 0
         m = re.search(r"ip_(rep\d+)", joined)
@@ -126,8 +135,8 @@ def get_active_run(procs: list[dict], cfg: dict) -> dict:
         stage, idx, substage = "Score", 2, None
     elif "snakemake" in joined:
         stage, idx, substage = "PureCLIP", 0, None
-    elif any(k in joined for k in ("agent/graph.py", "agent.graph", "batch_runner")):
-        stage, idx, substage = "LLM decide", 3, None
+    elif any(k in joined for k in ("agent/graph.py", "agent.graph", "optuna_runner.py", "batch_runner")):
+        stage, idx, substage = decide_label, 3, None
     else:
         stage, idx, substage = "Idle", -1, None
 
@@ -150,7 +159,8 @@ def get_active_run(procs: list[dict], cfg: dict) -> dict:
 
     elapsed = next(
         (p["etime"] for p in procs
-         if any(k in p["args"] for k in ("agent/graph.py", "agent.graph", "batch_runner"))),
+         if any(k in p["args"] for k in
+                ("agent/graph.py", "agent.graph", "optuna_runner.py", "batch_runner"))),
         None,
     )
 
@@ -167,6 +177,8 @@ def get_active_run(procs: list[dict], cfg: dict) -> dict:
 
     return {
         "is_active": is_active,
+        "optimizer": optimizer,
+        "decide_label": decide_label,
         "stage": stage,
         "stage_index": idx,
         "substage": substage,
@@ -207,13 +219,32 @@ def _source_label(root: Path) -> str:
     return "live"
 
 
+def _overnight_optimizers() -> dict[str, str]:
+    """Map overnight job_id -> optimizer ('llm'|'optuna') from the batch DB."""
+    mapping: dict[str, str] = {}
+    jobs_db = Path("results/overnight/jobs.jsonl")
+    if not jobs_db.exists():
+        return mapping
+    try:
+        for line in jobs_db.read_text().splitlines():
+            rec = json.loads(line)
+            if rec.get("type") == "job" and rec.get("job_id"):
+                mapping[rec["job_id"]] = rec.get("optimizer", "llm")
+    except Exception:
+        pass
+    return mapping
+
+
 def collect_experiments() -> list[dict]:
     """Group every score_report.json by dataset into iteration trajectories."""
     rows = []
+    optimizer_map = _overnight_optimizers()
     for root in _result_roots():
         if not root.exists():
             continue
         source = _source_label(root)
+        # For overnight roots, root.name is the job_id -> look up its optimizer.
+        optimizer = optimizer_map.get(root.name, "llm") if source == "overnight" else "llm"
         for report in root.glob("*/score_report.json"):
             try:
                 d = json.loads(report.read_text())
@@ -225,6 +256,7 @@ def collect_experiments() -> list[dict]:
             rows.append({
                 "dataset": dataset,
                 "run_id": run_id,
+                "optimizer": optimizer,
                 "iter": _iter_index(run_id),
                 "n_sites": d.get("n_binding_sites"),
                 "agreement": d.get("replicate_agreement"),
@@ -326,12 +358,16 @@ def build_status() -> dict:
     active["latest"] = latest
     active["reasoning"] = get_latest_reasoning()
 
+    # The final loop step is optimizer-specific.
+    stages = list(STAGES)
+    stages[-1] = active.get("decide_label") or STAGES[-1]
+
     host = get_host_info()
     return {
         "host": host["host"],
         "cpus": host["cpus"],
         "mem": host["mem"],
-        "stages": STAGES,
+        "stages": stages,
         "active": active,
         "experiments": experiments,
         "processes": procs,
@@ -374,6 +410,8 @@ HTML = r"""<!DOCTYPE html>
   .badge-live { background:rgba(63,185,80,0.14); color:var(--green); }
   .badge-batch { background:rgba(188,140,255,0.14); color:var(--purple); }
   .badge-overnight { background:rgba(210,153,29,0.16); color:var(--yellow); }
+  .badge-llm { background:rgba(88,166,255,0.16); color:var(--blue); }
+  .badge-optuna { background:rgba(210,153,29,0.18); color:var(--yellow); }
   .empty { color:var(--muted); font-style:italic; padding:10px; }
 
   /* active run card */
@@ -458,8 +496,12 @@ function renderActive(a, stages){
     return '<div class="empty">No run is currently active. Latest results below.</div>';
   }
   const proteinLine = [a.target_protein, a.cell_line].filter(Boolean).join(' · ');
+  const optBadge = a.optimizer==='optuna'
+    ? '<span class="badge badge-optuna">OPTUNA · TPE</span>'
+    : (a.optimizer==='llm' ? '<span class="badge badge-llm">LLM</span>' : '');
   let h = `<div class="active-head">
     <span class="badge badge-running">RUNNING</span>
+    ${optBadge}
     <span class="ds-pill">${esc(a.dataset||'—')}</span>
     <span class="ds-sub">${esc(proteinLine)}</span>
     <span class="ds-sub">• ${esc(a.run_id||'')}${a.iteration!==null?` · iteration ${a.iteration}`:''}</span>
@@ -495,8 +537,10 @@ function renderActive(a, stages){
     ${chip('chr21_fast', p.learn_on_chr21)}
   </div>`;
 
-  if(a.reasoning){
+  if(a.optimizer==='llm' && a.reasoning){
     h += `<div class="reasoning"><span class="lbl">latest agent reasoning</span>${esc(a.reasoning)}</div>`;
+  } else if(a.optimizer==='optuna'){
+    h += `<div class="reasoning"><span class="lbl">strategy</span>Optuna TPE (Bayesian) — proposes the next parameter set by modelling past trials; no natural-language reasoning.</div>`;
   }
   return h;
 }
@@ -520,15 +564,29 @@ function sparkline(items){
 function renderExperiments(exps){
   if(!exps || !exps.length) return '<div class="empty">No runs found yet</div>';
   let html = '';
+  const optBadge = (o) => o==='optuna'
+    ? '<span class="badge badge-optuna src">optuna</span>'
+    : '<span class="badge badge-llm src">llm</span>';
   for(const g of exps){
+    // Per-optimizer best, so a head-to-head shows up when a dataset has both.
+    const byOpt = {};
+    for(const it of g.iterations){
+      const o = it.optimizer||'llm';
+      if(it.composite!=null && (byOpt[o]===undefined || it.composite>byOpt[o])) byOpt[o]=it.composite;
+    }
+    let versus = '';
+    if(byOpt.llm!==undefined && byOpt.optuna!==undefined){
+      const win = byOpt.llm===byOpt.optuna ? 'tie' : (byOpt.llm>byOpt.optuna?'LLM':'Optuna');
+      versus = ` · <b style="color:var(--blue)">LLM ${fmt(byOpt.llm)}</b> vs <b style="color:var(--yellow)">Optuna ${fmt(byOpt.optuna)}</b> → ${win}`;
+    }
     html += `<div style="margin-bottom:22px">
       <div class="exp-head">
         <span class="name">${esc(g.name)}</span>
-        <span class="ds-sub">${g.n_iters} iteration${g.n_iters===1?'':'s'} · best composite <b style="color:var(--green)">${fmt(g.best_composite)}</b></span>
+        <span class="ds-sub">${g.n_iters} iteration${g.n_iters===1?'':'s'} · best <b style="color:var(--green)">${fmt(g.best_composite)}</b>${versus}</span>
         ${sparkline(g.iterations)}
       </div>`;
     html += `<table><tr>
-      <th>run</th><th>iter</th><th>sites</th><th>reprod.</th>
+      <th>run</th><th>opt</th><th>iter</th><th>sites</th><th>reprod.</th>
       <th>motif</th><th>recall</th><th>composite</th><th>src</th></tr>`;
     for(const it of g.iterations){
       const isBest = it.run_id===g.best_run;
@@ -540,6 +598,7 @@ function renderExperiments(exps){
       const repro = (it.reproducibility!==null&&it.reproducibility!==undefined) ? it.reproducibility : it.agreement;
       html += `<tr class="${isBest?'best':''}">
         <td>${esc(it.run_id)}</td>
+        <td>${optBadge(it.optimizer)}</td>
         <td>${it.iter===null?'—':it.iter}</td>
         <td>${it.n_sites??'—'}</td>
         <td>${fmt(repro)}</td>
