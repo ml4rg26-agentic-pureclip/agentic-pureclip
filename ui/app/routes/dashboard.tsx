@@ -9,6 +9,7 @@ import {
   type IterationRow,
   type Plan,
   type Proc,
+  type Status,
 } from "../lib/api";
 
 export function meta() {
@@ -42,23 +43,90 @@ export default function Dashboard() {
         {updatedAt ? <span> · updated {updatedAt.toLocaleTimeString()}</span> : null}
       </div>
 
-      <ActiveCard active={data.active} stages={data.stages} />
+      <Kpis data={data} />
+      {data.active.is_active ? <ActiveCard active={data.active} stages={data.stages} /> : null}
       <PlanCard plan={data.plan} />
-      <TrajectoriesCard experiments={data.experiments} />
+      <Leaderboard experiments={data.experiments} />
+      <Details experiments={data.experiments} active={data.active} />
       <ProcsCard procs={data.processes} />
     </>
   );
 }
 
-function ActiveCard({ active: a, stages }: { active: ActiveRun; stages: string[] }) {
-  if (!a || !a.is_active) {
-    return (
-      <section className="section">
-        <h2>⚡ Active Run</h2>
-        <div className="empty">No run is currently active. Latest results below.</div>
-      </section>
-    );
+/* ── Overview ─────────────────────────────────────────────────── */
+
+function bestOverall(experiments: Experiment[]) {
+  let best: { name: string; v: number } | null = null;
+  for (const e of experiments) {
+    if (e.best_composite != null && (!best || e.best_composite > best.v))
+      best = { name: e.name, v: e.best_composite };
   }
+  return best;
+}
+
+function Kpis({ data }: { data: Status }) {
+  const a = data.active;
+  const plan = data.plan;
+  const totalIters = data.experiments.reduce((s, e) => s + e.n_iters, 0);
+  const best = bestOverall(data.experiments);
+  return (
+    <div className="kpis">
+      <div className="kpi">
+        <div className="v">
+          {a.is_active ? (
+            <><span className="dot run" />Running</>
+          ) : (
+            <><span className="dot idle" />Idle</>
+          )}
+        </div>
+        <div className="l">Status</div>
+        {a.is_active ? (
+          <div className="sub">
+            {a.dataset} · {a.optimizer === "optuna" ? "Optuna" : "LLM"} · {a.stage}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="kpi">
+        <div className="v" style={{ color: "var(--green)" }}>{fmt(best?.v)}</div>
+        <div className="l">Best composite</div>
+        {best ? <div className="sub">{best.name}</div> : null}
+      </div>
+
+      <div className="kpi">
+        <div className="v">{data.experiments.length}</div>
+        <div className="l">Datasets</div>
+        <div className="sub">{totalIters} iterations scored</div>
+      </div>
+
+      {plan ? (
+        <div className="kpi">
+          <div className="v">
+            {plan.counts.done}<span style={{ color: "var(--muted)", fontSize: 14 }}>/{plan.jobs.length}</span>
+          </div>
+          <div className="l">Batch jobs done</div>
+          <div className="sub">
+            {plan.counts.running} running · {plan.counts.queued} queued
+          </div>
+        </div>
+      ) : null}
+
+      {plan ? (
+        <div className="kpi">
+          <div className="v" style={{ color: plan.eta_remaining_s > 0 ? "var(--blue)" : "var(--green)" }}>
+            {plan.eta_remaining_s > 0 ? `~${humanDur(plan.eta_remaining_s)}` : "done"}
+          </div>
+          <div className="l">Batch ETA</div>
+          {plan.eta_remaining_s > 0 ? <div className="sub">finish ~{clockIn(plan.eta_remaining_s)}</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ── Active run ───────────────────────────────────────────────── */
+
+function ActiveCard({ active: a, stages }: { active: ActiveRun; stages: string[] }) {
   const proteinLine = [a.target_protein, a.cell_line].filter(Boolean).join(" · ");
   const m = a.latest ?? ({} as IterationRow);
   const repro = m.reproducibility ?? m.agreement;
@@ -151,26 +219,22 @@ function Chip({ k, v }: { k: string; v: unknown }) {
   );
 }
 
+/* ── Batch queue ──────────────────────────────────────────────── */
+
 function PlanCard({ plan }: { plan: Plan | null }) {
   if (!plan || !plan.jobs.length) return null;
   const c = plan.counts;
   const manifest = (plan.manifest ?? "").split("/").pop();
+  const running = c.running > 0;
   return (
-    <section className="section">
-      <h2>📋 Batch Queue &amp; ETA</h2>
-      <div className="ds-sub" style={{ marginBottom: 12 }}>
-        {manifest} · <b>{c.done}</b> done · <b style={{ color: "var(--yellow)" }}>{c.running}</b> running ·{" "}
-        <b>{c.queued}</b> queued
-        {plan.eta_remaining_s > 0 ? (
-          <>
-            {" "}· <b style={{ color: "var(--blue)" }}>~{humanDur(plan.eta_remaining_s)} left</b> (finish ~
-            {clockIn(plan.eta_remaining_s)})
-          </>
-        ) : (
-          <> · <b style={{ color: "var(--green)" }}>complete</b></>
-        )}
-        <span style={{ opacity: 0.7 }}> · estimates are rough</span>
-      </div>
+    <details className="section" open={running}>
+      <summary>
+        📋 Batch Queue &amp; ETA
+        <span className="count">
+          {manifest} · {c.done}/{plan.jobs.length} done
+          {running ? ` · ~${humanDur(plan.eta_remaining_s)} left` : " · complete"}
+        </span>
+      </summary>
       <table>
         <thead>
           <tr>
@@ -180,39 +244,39 @@ function PlanCard({ plan }: { plan: Plan | null }) {
         </thead>
         <tbody>
           {plan.jobs.map((j, i) => {
-            const running = j.status === "running";
-            const queued = j.status === "queued";
+            const isRun = j.status === "running";
+            const isQ = j.status === "queued";
             const done = j.done_iters ?? 0;
             const frac = Math.min(1, done / (j.max_iter || 1));
             return (
-              <tr key={j.job_id} className={running ? "best" : ""}>
+              <tr key={j.job_id} className={isRun ? "best" : ""}>
                 <td>{i + 1}</td>
                 <td>{j.job_id}</td>
                 <td><OptBadge o={j.optimizer} /></td>
                 <td>{j.dataset}</td>
                 <td>
-                  {running ? <span className="badge badge-running">running</span>
-                    : queued ? <span className="badge badge-queued">queued</span>
+                  {isRun ? <span className="badge badge-running">running</span>
+                    : isQ ? <span className="badge badge-queued">queued</span>
                     : <span className={`badge ${j.status === "completed" ? "badge-done" : "badge-error"}`}>{j.status}</span>}
                 </td>
                 <td>
-                  {running ? (
+                  {isRun ? (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       {done}/{j.max_iter}
-                      <span className="progress-bar" style={{ width: 90 }}>
+                      <span className="progress-bar" style={{ width: 80 }}>
                         <span className="progress-fill running" style={{ width: `${Math.round(frac * 100)}%`, display: "block" }} />
                       </span>
                     </span>
-                  ) : queued ? `0/${j.max_iter}` : `${j.max_iter}/${j.max_iter}`}
+                  ) : isQ ? `0/${j.max_iter}` : `${j.max_iter}/${j.max_iter}`}
                 </td>
-                <td><b>{queued || running ? "—" : fmt(j.best_composite)}</b></td>
-                <td>{queued || running ? `~${humanDur(j.eta_remaining_s)}` : humanDur(j.duration_s)}</td>
+                <td><b>{isQ || isRun ? "—" : fmt(j.best_composite)}</b></td>
+                <td>{isQ || isRun ? `~${humanDur(j.eta_remaining_s)}` : humanDur(j.duration_s)}</td>
               </tr>
             );
           })}
         </tbody>
       </table>
-    </section>
+    </details>
   );
 }
 
@@ -221,6 +285,62 @@ function OptBadge({ o }: { o?: string }) {
     <span className="badge badge-optuna sm">optuna</span>
   ) : (
     <span className="badge badge-llm sm">llm</span>
+  );
+}
+
+/* ── Results: leaderboard + per-dataset detail ────────────────── */
+
+function bestByOptimizer(it: IterationRow[]) {
+  const byOpt: Record<string, number> = {};
+  for (const r of it) {
+    const o = r.optimizer || "llm";
+    if (r.composite != null && (byOpt[o] === undefined || r.composite > byOpt[o])) byOpt[o] = r.composite;
+  }
+  return byOpt;
+}
+
+function Leaderboard({ experiments }: { experiments: Experiment[] }) {
+  if (!experiments.length) {
+    return (
+      <section className="section">
+        <h2>🏆 Results</h2>
+        <div className="empty">No runs found yet</div>
+      </section>
+    );
+  }
+  const ranked = [...experiments].sort((a, b) => (b.best_composite ?? -1) - (a.best_composite ?? -1));
+  return (
+    <section className="section">
+      <h2>🏆 Results — best per dataset</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>dataset</th><th>iters</th><th>LLM</th><th>Optuna</th>
+            <th>winner</th><th>best composite</th><th>trend</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ranked.map((g) => {
+            const byOpt = bestByOptimizer(g.iterations);
+            const hasBoth = byOpt.llm !== undefined && byOpt.optuna !== undefined;
+            const winner = hasBoth
+              ? byOpt.llm === byOpt.optuna ? "tie" : byOpt.llm > byOpt.optuna ? "llm" : "optuna"
+              : null;
+            return (
+              <tr key={g.name}>
+                <td><b>{g.name}</b></td>
+                <td>{g.n_iters}</td>
+                <td style={{ color: "var(--blue)" }}>{byOpt.llm !== undefined ? fmt(byOpt.llm) : "—"}</td>
+                <td style={{ color: "var(--yellow)" }}>{byOpt.optuna !== undefined ? fmt(byOpt.optuna) : "—"}</td>
+                <td>{winner ? <span className={`win ${winner}`}>{winner === "tie" ? "tie" : winner.toUpperCase()}</span> : "—"}</td>
+                <td><b style={{ color: "var(--green)" }}>{fmt(g.best_composite)}</b></td>
+                <td><Sparkline items={g.iterations} /></td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </section>
   );
 }
 
@@ -242,98 +362,74 @@ function Sparkline({ items }: { items: IterationRow[] }) {
   );
 }
 
-function TrajectoriesCard({ experiments }: { experiments: Experiment[] }) {
+function Details({ experiments, active }: { experiments: Experiment[]; active: ActiveRun }) {
+  if (!experiments.length) return null;
   return (
-    <section className="section">
-      <h2>🔬 Optimisation Trajectories</h2>
-      {!experiments.length ? (
-        <div className="empty">No runs found yet</div>
-      ) : (
-        experiments.map((g) => {
-          const byOpt: Record<string, number> = {};
-          for (const it of g.iterations) {
-            const o = it.optimizer || "llm";
-            if (it.composite != null && (byOpt[o] === undefined || it.composite > byOpt[o]))
-              byOpt[o] = it.composite;
-          }
-          const versus =
-            byOpt.llm !== undefined && byOpt.optuna !== undefined ? (
-              <>
-                {" "}·{" "}
-                <b style={{ color: "var(--blue)" }}>LLM {fmt(byOpt.llm)}</b> vs{" "}
-                <b style={{ color: "var(--yellow)" }}>Optuna {fmt(byOpt.optuna)}</b> →{" "}
-                {byOpt.llm === byOpt.optuna ? "tie" : byOpt.llm > byOpt.optuna ? "LLM" : "Optuna"}
-              </>
-            ) : null;
-          return (
-            <div key={g.name} style={{ marginBottom: 22 }}>
-              <div className="exp-head">
-                <span className="name">{g.name}</span>
-                <span className="ds-sub">
-                  {g.n_iters} iteration{g.n_iters === 1 ? "" : "s"} · best{" "}
-                  <b style={{ color: "var(--green)" }}>{fmt(g.best_composite)}</b>
-                  {versus}
-                </span>
-                <Sparkline items={g.iterations} />
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>run</th><th>opt</th><th>iter</th><th>sites</th>
-                    <th>reprod.</th><th>motif</th><th>recall</th><th>composite</th><th>src</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {g.iterations.map((it) => {
-                    const repro = it.reproducibility ?? it.agreement;
-                    const src =
-                      it.source === "batch" ? "badge-batch"
-                        : it.source === "overnight" ? "badge-overnight"
-                        : "badge-live";
-                    return (
-                      <tr key={it.run_id} className={it.run_id === g.best_run ? "best" : ""}>
-                        <td>{it.run_id}</td>
-                        <td><OptBadge o={it.optimizer} /></td>
-                        <td>{it.iter ?? "—"}</td>
-                        <td>{it.n_sites ?? "—"}</td>
-                        <td>{fmt(repro)}</td>
-                        <td>{fmt(it.motif)}</td>
-                        <td>{fmt(it.recall)}</td>
-                        <td><b>{fmt(it.composite)}</b></td>
-                        <td><span className={`badge ${src} sm`}>{it.source}</span></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          );
-        })
-      )}
-    </section>
+    <>
+      {experiments.map((g) => {
+        const openByDefault = active.is_active && active.dataset === g.name;
+        return (
+          <details className="section" key={g.name} open={openByDefault}>
+            <summary>
+              {g.name}
+              <span className="count">{g.n_iters} iters · best {fmt(g.best_composite)}</span>
+            </summary>
+            <table>
+              <thead>
+                <tr>
+                  <th>run</th><th>opt</th><th>iter</th><th>sites</th>
+                  <th>reprod.</th><th>motif</th><th>recall</th><th>composite</th><th>src</th>
+                </tr>
+              </thead>
+              <tbody>
+                {g.iterations.map((it) => {
+                  const repro = it.reproducibility ?? it.agreement;
+                  const src =
+                    it.source === "batch" ? "badge-batch"
+                      : it.source === "overnight" ? "badge-overnight"
+                      : "badge-live";
+                  return (
+                    <tr key={it.run_id} className={it.run_id === g.best_run ? "best" : ""}>
+                      <td>{it.run_id}</td>
+                      <td><OptBadge o={it.optimizer} /></td>
+                      <td>{it.iter ?? "—"}</td>
+                      <td>{it.n_sites ?? "—"}</td>
+                      <td>{fmt(repro)}</td>
+                      <td>{fmt(it.motif)}</td>
+                      <td>{fmt(it.recall)}</td>
+                      <td><b>{fmt(it.composite)}</b></td>
+                      <td><span className={`badge ${src} sm`}>{it.source}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </details>
+        );
+      })}
+    </>
   );
 }
 
 function ProcsCard({ procs }: { procs: Proc[] }) {
+  if (!procs.length) return null;
   return (
-    <section className="section">
-      <h2>🖥 Processes</h2>
-      {!procs.length ? (
-        <div className="empty">No active processes</div>
-      ) : (
-        <table>
-          <thead>
-            <tr><th>process</th><th>CPU%</th><th>MEM%</th><th>elapsed</th></tr>
-          </thead>
-          <tbody>
-            {procs.map((p, i) => (
-              <tr key={i}>
-                <td>{p.label}</td><td>{p.cpu}</td><td>{p.mem}</td><td>{p.etime}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </section>
+    <details className="section">
+      <summary>
+        🖥 Processes <span className="count">{procs.length} active</span>
+      </summary>
+      <table>
+        <thead>
+          <tr><th>process</th><th>CPU%</th><th>MEM%</th><th>elapsed</th></tr>
+        </thead>
+        <tbody>
+          {procs.map((p, i) => (
+            <tr key={i}>
+              <td>{p.label}</td><td>{p.cpu}</td><td>{p.mem}</td><td>{p.etime}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </details>
   );
 }
