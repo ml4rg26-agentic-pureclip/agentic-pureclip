@@ -13,6 +13,7 @@ from agent.decisions import (
     parse_decision_response,
     validated_next_config,
 )
+from agent.evaluation import FORCE_RULES
 from agent.logging_config import setup_logger
 from agent.state import AgentState, IterationRecord
 from pipeline.configs import (
@@ -64,7 +65,7 @@ def run_pipeline(state: AgentState) -> dict:
     run_snakemake(
         CONFIG_PATH,
         jobs=state["current_config"]["resources"]["threads"],
-        force_rules=("pureclip", "pureclip_per_replicate", "postprocess"),
+        force_rules=FORCE_RULES,
     )
     return {}
 
