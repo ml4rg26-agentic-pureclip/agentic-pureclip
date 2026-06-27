@@ -151,6 +151,12 @@ def get_active_run(procs: list[dict], cfg: dict) -> dict:
     if md:
         dataset = md.group(1)
 
+    # The overnight orchestrator runs each job under results/overnight/<job_id>/.
+    job_id = None
+    mj = re.search(r"results/overnight/([^/ ]+)/", joined)
+    if mj:
+        job_id = mj.group(1)
+
     it = None
     if run_id:
         mi = ITER_RE.search(run_id)
@@ -164,8 +170,14 @@ def get_active_run(procs: list[dict], cfg: dict) -> dict:
         None,
     )
 
-    pc = cfg.get("pureclip", {})
-    post = cfg.get("postprocessing", {})
+    # Prefer the active job's own config (the orchestrator writes one per job).
+    active_cfg = cfg
+    if job_id:
+        job_cfg = _read_yaml(Path(f"results/overnight/{job_id}/run_config.yaml"))
+        if job_cfg:
+            active_cfg = job_cfg
+    pc = active_cfg.get("pureclip", {})
+    post = active_cfg.get("postprocessing", {})
     params = {
         "bandwidth_nt": pc.get("bandwidth_nt"),
         "merge_distance_nt": pc.get("merge_distance_nt"),
@@ -179,6 +191,7 @@ def get_active_run(procs: list[dict], cfg: dict) -> dict:
         "is_active": is_active,
         "optimizer": optimizer,
         "decide_label": decide_label,
+        "job_id": job_id,
         "stage": stage,
         "stage_index": idx,
         "substage": substage,
@@ -342,6 +355,120 @@ def get_host_info() -> dict:
     return {"host": host, "cpus": cpus, "mem": mem}
 
 
+def _etime_to_seconds(etime: str | None) -> int | None:
+    """Parse ps etime ('MM:SS', 'HH:MM:SS', 'D-HH:MM:SS') to seconds."""
+    if not etime:
+        return None
+    try:
+        days = 0
+        if "-" in etime:
+            d, etime = etime.split("-", 1)
+            days = int(d)
+        parts = [int(x) for x in etime.split(":")]
+        while len(parts) < 3:
+            parts.insert(0, 0)
+        h, m, s = parts
+        return days * 86400 + h * 3600 + m * 60 + s
+    except Exception:
+        return None
+
+
+def _manifest_plan_jobs(manifest_path: str) -> list[dict]:
+    """Ordered jobs from a manifest with defaults applied (id, dataset, optimizer, max_iter)."""
+    try:
+        man = yaml.safe_load(Path(manifest_path).read_text())
+    except Exception:
+        return []
+    defaults = man.get("defaults", {})
+    jobs = []
+    for job in man.get("jobs", []):
+        jobs.append({
+            "job_id": job["id"],
+            "dataset": job["dataset"],
+            "optimizer": (job.get("optimizer") or defaults.get("optimizer") or "llm").lower(),
+            "max_iter": int(job.get("max_iter", defaults.get("max_iter", 5))),
+        })
+    return jobs
+
+
+def _count_job_iters(job_id: str) -> int:
+    d = Path(f"results/overnight/{job_id}")
+    return len(list(d.glob("*/score_report.json"))) if d.exists() else 0
+
+
+def get_batch_plan(active: dict) -> dict | None:
+    """Queue + rough ETA for the currently running overnight/comparison batch."""
+    db = Path("results/overnight/jobs.jsonl")
+    if not db.exists():
+        return None
+    try:
+        records = [json.loads(l) for l in db.read_text().splitlines() if l.strip()]
+    except Exception:
+        return None
+
+    bs, bs_pos = None, -1
+    for i, r in enumerate(records):
+        if r.get("type") == "batch_start":
+            bs, bs_pos = r, i
+    if not bs:
+        return None
+    plan_jobs = _manifest_plan_jobs(bs.get("manifest", ""))
+    if not plan_jobs:
+        return None
+
+    completed = {r["job_id"]: r for r in records[bs_pos + 1:] if r.get("type") == "job"}
+
+    # Timing model from ALL historical jobs (better early estimates), per dataset.
+    per_ds: dict[str, list[float]] = {}
+    samples: list[float] = []
+    for r in records:
+        if r.get("type") == "job" and r.get("iterations_scored") and r.get("duration_s"):
+            pit = r["duration_s"] / r["iterations_scored"]
+            per_ds.setdefault(r["dataset"], []).append(pit)
+            samples.append(pit)
+    global_pit = sum(samples) / len(samples) if samples else 600.0
+
+    def per_iter(ds: str) -> float:
+        vals = per_ds.get(ds)
+        return sum(vals) / len(vals) if vals else global_pit
+
+    active_job_id = (active or {}).get("job_id")
+    out_jobs, remaining_total = [], 0.0
+    for j in plan_jobs:
+        jid = j["job_id"]
+        est_total = j["max_iter"] * per_iter(j["dataset"])
+        row = dict(j, per_iter_s=round(per_iter(j["dataset"])))
+        if jid in completed:
+            r = completed[jid]
+            row.update(status=r.get("status", "completed"),
+                       best_composite=r.get("best_composite"),
+                       duration_s=r.get("duration_s"), eta_remaining_s=0)
+        elif jid == active_job_id:
+            done = _count_job_iters(jid)
+            remaining = max(0.0, (j["max_iter"] - done) * per_iter(j["dataset"]))
+            remaining_total += remaining
+            row.update(status="running", done_iters=done,
+                       elapsed_s=_etime_to_seconds((active or {}).get("elapsed")),
+                       eta_remaining_s=round(remaining))
+        else:
+            remaining_total += est_total
+            row.update(status="queued", eta_remaining_s=round(est_total))
+        out_jobs.append(row)
+
+    counts = {
+        "done": sum(1 for x in out_jobs if x["status"] not in ("running", "queued")),
+        "running": sum(1 for x in out_jobs if x["status"] == "running"),
+        "queued": sum(1 for x in out_jobs if x["status"] == "queued"),
+    }
+    return {
+        "manifest": bs.get("manifest"),
+        "started": bs.get("started"),
+        "jobs": out_jobs,
+        "eta_remaining_s": round(remaining_total),
+        "counts": counts,
+    }
+
+
 def build_status() -> dict:
     cfg = _read_yaml(RUN_CONFIG)
     procs = get_processes()
@@ -369,6 +496,7 @@ def build_status() -> dict:
         "mem": host["mem"],
         "stages": stages,
         "active": active,
+        "plan": get_batch_plan(active),
         "experiments": experiments,
         "processes": procs,
     }
@@ -412,6 +540,12 @@ HTML = r"""<!DOCTYPE html>
   .badge-overnight { background:rgba(210,153,29,0.16); color:var(--yellow); }
   .badge-llm { background:rgba(88,166,255,0.16); color:var(--blue); }
   .badge-optuna { background:rgba(210,153,29,0.18); color:var(--yellow); }
+  .badge-queued { background:rgba(139,148,158,0.16); color:var(--muted); }
+  .badge-done { background:rgba(63,185,80,0.15); color:var(--green); }
+  .badge-error { background:rgba(248,81,73,0.15); color:var(--red); }
+  .progress-bar { height:6px; background:var(--border); border-radius:3px; overflow:hidden; display:inline-block; }
+  .progress-fill { height:100%; background:var(--accent); border-radius:3px; }
+  .progress-fill.running { background:var(--yellow); animation:pulse 1.6s infinite; }
   .empty { color:var(--muted); font-style:italic; padding:10px; }
 
   /* active run card */
@@ -464,6 +598,11 @@ HTML = r"""<!DOCTYPE html>
 <div class="section" id="activeSection">
   <h2>⚡ Active Run</h2>
   <div id="active"><div class="empty">Loading…</div></div>
+</div>
+
+<div class="section" id="planSection" style="display:none">
+  <h2>📋 Batch Queue &amp; ETA</h2>
+  <div id="plan"></div>
 </div>
 
 <div class="section">
@@ -613,6 +752,62 @@ function renderExperiments(exps){
   return html;
 }
 
+function humanDur(s){
+  if(s===null||s===undefined) return '—';
+  s = Math.max(0, Math.round(s));
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60);
+  if(h>0) return `${h}h ${m}m`;
+  if(m>0) return `${m}m`;
+  return `${s}s`;
+}
+function clockIn(s){
+  const t = new Date(Date.now()+s*1000);
+  return t.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+
+function renderPlan(plan){
+  const sec = document.getElementById('planSection');
+  if(!plan || !plan.jobs || !plan.jobs.length){ sec.style.display='none'; return ''; }
+  sec.style.display='';
+  const c = plan.counts||{};
+  const manifest = (plan.manifest||'').split('/').pop();
+  let h = `<div class="ds-sub" style="margin-bottom:12px">
+      ${esc(manifest)} · <b>${c.done||0}</b> done · <b style="color:var(--yellow)">${c.running||0}</b> running · <b>${c.queued||0}</b> queued
+      ${plan.eta_remaining_s>0 ? ` · <b style="color:var(--blue)">~${humanDur(plan.eta_remaining_s)} left</b> (finish ~${clockIn(plan.eta_remaining_s)})` : ' · <b style="color:var(--green)">complete</b>'}
+      <span class="ds-sub" style="opacity:.7"> · estimates are rough</span>
+    </div>`;
+  h += '<table><tr><th>#</th><th>job</th><th>opt</th><th>dataset</th><th>status</th><th>progress</th><th>best</th><th>ETA</th></tr>';
+  plan.jobs.forEach((j,i)=>{
+    const optB = j.optimizer==='optuna'
+      ? '<span class="badge badge-optuna src">optuna</span>'
+      : '<span class="badge badge-llm src">llm</span>';
+    let statusB, progress, best='—', eta='—';
+    if(j.status==='running'){
+      const done=j.done_iters||0, frac=Math.min(1, done/(j.max_iter||1));
+      statusB='<span class="badge badge-running">running</span>';
+      progress=`<div style="display:flex;align-items:center;gap:6px">${done}/${j.max_iter}
+        <div class="progress-bar" style="width:90px"><div class="progress-fill running" style="width:${Math.round(frac*100)}%"></div></div></div>`;
+      eta='~'+humanDur(j.eta_remaining_s);
+    } else if(j.status==='queued'){
+      statusB='<span class="badge badge-queued">queued</span>';
+      progress=`0/${j.max_iter}`;
+      eta='~'+humanDur(j.eta_remaining_s);
+    } else {
+      const ok = j.status==='completed';
+      statusB=`<span class="badge ${ok?'badge-done':'badge-error'}">${esc(j.status)}</span>`;
+      progress=`${j.max_iter}/${j.max_iter}`;
+      best = fmt(j.best_composite);
+      eta = j.duration_s!==undefined&&j.duration_s!==null ? humanDur(j.duration_s) : '—';
+    }
+    const cls = j.status==='running' ? 'best' : '';
+    h += `<tr class="${cls}">
+      <td>${i+1}</td><td>${esc(j.job_id)}</td><td>${optB}</td><td>${esc(j.dataset)}</td>
+      <td>${statusB}</td><td>${progress}</td><td><b>${best}</b></td><td>${eta}</td></tr>`;
+  });
+  h += '</table>';
+  return h;
+}
+
 function renderProcs(procs){
   if(!procs || !procs.length) return '<div class="empty">No active processes</div>';
   let h = '<table><tr><th>process</th><th>CPU%</th><th>MEM%</th><th>elapsed</th></tr>';
@@ -626,6 +821,7 @@ function render(data){
   document.getElementById('hostInfo').textContent =
     `${data.host} · ${data.cpus} CPUs · ${data.mem} RAM`;
   document.getElementById('active').innerHTML = renderActive(data.active, data.stages);
+  document.getElementById('plan').innerHTML = renderPlan(data.plan);
   document.getElementById('experiments').innerHTML = renderExperiments(data.experiments);
   document.getElementById('procs').innerHTML = renderProcs(data.processes);
 }
