@@ -112,4 +112,5 @@ if __name__ == "__main__":
     priors = base_config.get("priors") or json.load(open("config/priors.json", encoding="utf-8"))
     weights = priors.get("objective_weights") or DEFAULT_OBJECTIVE_WEIGHTS
     n_trials = int(os.environ.get("MAX_ITER", "12"))
-    run_optuna(base_config, n_trials, weights)
+    search_bounds = base_config.get("search_bounds") or DEFAULT_SEARCH_BOUNDS
+    run_optuna(base_config, n_trials, weights, search_bounds=search_bounds)

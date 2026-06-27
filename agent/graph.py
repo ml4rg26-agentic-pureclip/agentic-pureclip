@@ -212,7 +212,7 @@ if __name__ == "__main__":
     initial_state: AgentState = {
         "priors": priors,
         "objective_metric": priors.get("primary_objective_metric", "replicate_agreement"),
-        "search_bounds": DEFAULT_SEARCH_BOUNDS,
+        "search_bounds": base_config.get("search_bounds") or DEFAULT_SEARCH_BOUNDS,
         "current_config": base_config,
         "current_iteration": 0,
         "history": [],

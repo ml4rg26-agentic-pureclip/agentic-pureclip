@@ -96,6 +96,29 @@ def build_job_config(job: dict, defaults: dict, pass_idx: int):
     weights = job.get("objective_weights") or defaults.get("objective_weights") or DEFAULT_OBJECTIVE_WEIGHTS
     cfg.setdefault("priors", {})["objective_weights"] = weights
 
+    # Optional custom search bounds — which parameters to optimize and over what
+    # range. Stored on the config so graph.py / optuna_runner.py pick them up, and
+    # the starting values are clamped inside the bounds so validation passes.
+    bounds = job.get("search_bounds") or defaults.get("search_bounds")
+    if bounds:
+        cfg["search_bounds"] = bounds
+        for section, params in bounds.items():
+            for key, rng in params.items():
+                try:
+                    low, high = int(rng[0]), int(rng[1])
+                except (TypeError, ValueError, IndexError):
+                    continue
+                cur = cfg.get(section, {}).get(key)
+                if isinstance(cur, bool):
+                    cur = int(cur)
+                if not isinstance(cur, (int, float)):
+                    cur = (low + high) // 2
+                clamped = max(low, min(high, int(cur)))
+                if key in ("high_precision_mode", "use_input_covariate"):
+                    cfg[section][key] = bool(clamped)
+                else:
+                    cfg[section][key] = clamped
+
     results_root = f"results/overnight/{job_id}"
     cfg["run_id"] = f"{dataset}_iter_00"
     cfg["output"] = {
