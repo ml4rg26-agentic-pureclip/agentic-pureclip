@@ -12,6 +12,9 @@ export default function Layout() {
           <NavLink to="/" end>
             <span className="ico">📊</span><span>Dashboard</span>
           </NavLink>
+          <NavLink to="/plan">
+            <span className="ico">▶️</span><span>Plan run</span>
+          </NavLink>
           <NavLink to="/variables">
             <span className="ico">⚙️</span><span>Variables</span>
           </NavLink>
