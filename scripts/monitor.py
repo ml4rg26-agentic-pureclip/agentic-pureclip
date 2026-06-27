@@ -18,6 +18,7 @@ per-dataset iteration trajectory.
 from __future__ import annotations
 
 import json
+import mimetypes
 import re
 import subprocess
 from pathlib import Path
@@ -833,9 +834,38 @@ setInterval(fetchData, 6000);
 </html>"""
 
 
+# Built React SPA (ui/build/client). When present it is served at / and the
+# embedded HTML is the fallback for environments without a build.
+UI_DIST = Path("ui/build/client")
+
+
 class MonitorHandler(BaseHTTPRequestHandler):
     def log_message(self, *args):  # silence default logging
         pass
+
+    def _send_file(self, path: Path, status: int = 200) -> None:
+        ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+        data = path.read_bytes()
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _serve_spa(self) -> bool:
+        """Serve a static asset, or fall back to index.html for client routes."""
+        rel = self.path.split("?", 1)[0].lstrip("/")
+        root = UI_DIST.resolve()
+        candidate = (root / rel).resolve()
+        is_inside = candidate == root or root in candidate.parents
+        if rel and is_inside and candidate.is_file():
+            self._send_file(candidate)
+            return True
+        index = UI_DIST / "index.html"
+        if index.is_file():
+            self._send_file(index)  # SPA fallback (client-side routing)
+            return True
+        return False
 
     def do_GET(self):
         if self.path == "/api/status":
@@ -845,6 +875,9 @@ class MonitorHandler(BaseHTTPRequestHandler):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(payload)
+            return
+        # Prefer the built React app; otherwise serve the embedded dashboard.
+        if UI_DIST.exists() and self._serve_spa():
             return
         if self.path in ("/", "/index.html"):
             self.send_response(200)
