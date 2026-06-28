@@ -488,6 +488,80 @@ def get_batch_plan(active: dict) -> dict | None:
     }
 
 
+def _flat_params(params: dict) -> dict:
+    out = {}
+    for kv in (params or {}).values():
+        for k, v in (kv or {}).items():
+            out[k] = v
+    return out
+
+
+def _param_diff(prev: dict | None, curr: dict) -> list[dict]:
+    """Which tunables changed from the previous iteration to this one."""
+    if not prev:
+        return []
+    pf, cf = _flat_params(prev), _flat_params(curr)
+    return [{"key": k, "from": pf.get(k), "to": v} for k, v in cf.items() if k in pf and pf[k] != v]
+
+
+def collect_runs() -> list[dict]:
+    """Per-run decision trail: each iteration's params, what changed, and the reasoning."""
+    root = Path("results/overnight")
+    if not root.exists():
+        return []
+    opt_map = _overnight_optimizers()
+    runs = []
+    for d in (x for x in root.iterdir() if x.is_dir()):
+        reports = sorted(d.glob("*/score_report.json"), key=lambda p: p.stat().st_mtime)
+        if not reports:
+            continue
+        decisions: dict = {}
+        dj = d / "decisions.jsonl"
+        if dj.exists():
+            try:
+                for line in dj.read_text().splitlines():
+                    if line.strip():
+                        rec = json.loads(line)
+                        decisions[rec.get("iteration")] = rec
+            except Exception:
+                pass
+        iters, prev, dataset = [], None, None
+        for rp in reports:
+            try:
+                rep = json.loads(rp.read_text())
+            except Exception:
+                continue
+            dataset = dataset or rep.get("dataset_id")
+            run_id = rep.get("run_id") or rp.parent.name
+            it = _iter_index(run_id)
+            params = rep.get("params") or {}
+            iters.append({
+                "iter": it,
+                "run_id": run_id,
+                "params": params,
+                "changed": _param_diff(prev, params),
+                "reproducibility": rep.get("reproducibility_score"),
+                "motif": rep.get("motif_hit_rate"),
+                "recall": rep.get("benchmark_region_recall"),
+                "n_sites": rep.get("n_binding_sites"),
+                "composite": round(composite_objective(rep), 4),
+                "reasoning": (decisions.get(it) or {}).get("reasoning"),
+            })
+            prev = params
+        comps = [i["composite"] for i in iters if i["composite"] is not None]
+        runs.append({
+            "job_id": d.name,
+            "dataset": dataset or _strip_iter(d.name),
+            "optimizer": opt_map.get(d.name, "llm"),
+            "n_iters": len(iters),
+            "best_composite": max(comps) if comps else None,
+            "iterations": iters,
+            "mtime": reports[-1].stat().st_mtime,
+        })
+    runs.sort(key=lambda r: r["mtime"], reverse=True)
+    return runs
+
+
 def build_status() -> dict:
     cfg = _read_yaml(RUN_CONFIG)
     procs = get_processes()
@@ -1045,6 +1119,9 @@ class MonitorHandler(BaseHTTPRequestHandler):
                 "weights": DEFAULT_OBJECTIVE_WEIGHTS,
                 "run_active": _run_active(),
             })
+            return
+        if self.path == "/api/runs":
+            self._json(200, {"runs": collect_runs()})
             return
         # Prefer the built React app; otherwise serve the embedded dashboard.
         if UI_DIST.exists() and self._serve_spa():

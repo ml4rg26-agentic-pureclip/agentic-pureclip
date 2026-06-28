@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -53,6 +54,36 @@ def _apply_params(config: dict, params: dict[tuple[str, str], int]) -> dict:
     return cfg
 
 
+def _record_decision(base_config: dict, trial_no: int, run_id: str, report: dict, score: float) -> None:
+    """Append a trial's params/scores to the run's decision trail (no NL reasoning)."""
+    results_root = (base_config.get("output") or {}).get("results_root")
+    if not results_root:
+        return
+    pc = report.get("params", {}).get("pureclip", {})
+    po = report.get("params", {}).get("postprocessing", {})
+    entry = {
+        "iteration": trial_no,
+        "optimizer": "optuna",
+        "run_id": run_id,
+        "params": {"pureclip": pc, "postprocessing": po},
+        "scores": {
+            k: report.get(k)
+            for k in ("reproducibility_score", "replicate_agreement", "motif_hit_rate",
+                      "benchmark_region_recall", "n_binding_sites")
+        },
+        "composite": round(score, 4),
+        "reasoning": "TPE proposal — sampled from the model of previous trials.",
+        "changes": None,
+    }
+    try:
+        path = Path(results_root) / "decisions.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry) + "\n")
+    except OSError:
+        logger.warning("Could not write decision trail to %s", results_root)
+
+
 def run_optuna(
     base_config: dict[str, Any],
     max_iter: int,
@@ -87,6 +118,7 @@ def run_optuna(
             report.get("motif_hit_rate"), report.get("benchmark_region_recall"),
             {f"{s}.{k}": v for (s, k), v in suggested.items()},
         )
+        _record_decision(base_config, trial.number, cfg["run_id"], report, score)
         if score > best["score"]:
             best["score"], best["config"] = score, cfg
         return score

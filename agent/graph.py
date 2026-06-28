@@ -1,6 +1,7 @@
 import copy
 import json
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -106,6 +107,34 @@ def _propose_next_config(state: AgentState, report: dict, weights: dict):
     return decision, None
 
 
+def _record_decision(state: AgentState, report: dict, objective: float, decision: dict | None) -> None:
+    """Append this iteration's params, scores and reasoning to the run's decision trail."""
+    results_root = (state["current_config"].get("output") or {}).get("results_root")
+    if not results_root:
+        return
+    entry = {
+        "iteration": state["current_iteration"],
+        "optimizer": "llm",
+        "run_id": state["current_config"].get("run_id"),
+        "params": tunable_snapshot(state["current_config"]),
+        "scores": {
+            k: report.get(k)
+            for k in ("reproducibility_score", "replicate_agreement", "motif_hit_rate",
+                      "benchmark_region_recall", "n_binding_sites")
+        },
+        "composite": round(objective, 4),
+        "reasoning": decision.get("reasoning") if decision else None,
+        "changes": decision.get("changes") if decision else None,
+    }
+    try:
+        path = Path(results_root) / "decisions.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry) + "\n")
+    except OSError:
+        logger.warning("Could not write decision trail to %s", results_root)
+
+
 def agent_decide(state: AgentState) -> dict:
     logger.info("Agent is deciding on next config")
     with open(score_report_path(state["current_config"]), "r", encoding="utf-8") as handle:
@@ -126,6 +155,7 @@ def agent_decide(state: AgentState) -> dict:
     best_config = state["current_config"] if improved else state["best_config"]
 
     decision, new_config = _propose_next_config(state, report, weights)
+    _record_decision(state, report, objective, decision)
 
     record: IterationRecord = {
         "iteration": state["current_iteration"],
