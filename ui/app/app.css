@@ -214,6 +214,27 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .banner.err { background: rgba(248,81,73,0.12); border: 1px solid rgba(248,81,73,0.4); color: var(--red); }
 .banner.warn { background: rgba(210,153,29,0.12); border: 1px solid rgba(210,153,29,0.4); color: var(--yellow); }
 
+/* Runs decision trail */
+.timeline { margin-top: 6px; }
+.titem { position: relative; padding: 0 0 16px 20px; border-left: 2px solid var(--border); }
+.titem:last-child { border-left-color: transparent; }
+.titem::before { content: ""; position: absolute; left: -7px; top: 3px; width: 12px; height: 12px;
+  border-radius: 50%; background: var(--card2); border: 2px solid var(--border); }
+.titem.best::before { background: var(--green); border-color: var(--green); }
+.titem.running::before { background: var(--yellow); border-color: var(--yellow); animation: pulse 1.6s infinite; }
+.titem-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.titem-head .it { font-weight: 700; font-size: 14px; }
+.titem-head .comp { color: var(--green); font-weight: 700; }
+.titem-metrics { font-size: 12px; color: var(--muted); margin: 4px 0; font-variant-numeric: tabular-nums; }
+.changes { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0; }
+.change-chip { font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: rgba(31,111,235,0.14); color: var(--blue); border-radius: 6px; padding: 2px 8px; }
+.change-chip .arr { color: var(--muted); }
+.reason { font-size: 12.5px; line-height: 1.5; color: #d8dde3; background: var(--card2);
+  border-left: 3px solid var(--purple); border-radius: 0 6px 6px 0; padding: 8px 12px; margin-top: 6px; }
+.reason.tpe { border-left-color: var(--yellow); color: var(--muted); font-style: italic; }
+.no-change { font-size: 11px; color: var(--muted); font-style: italic; }
+
 /* Variables page */
 .intro { background: var(--card2); border: 1px solid var(--border); border-radius: 10px;
   padding: 16px 18px; margin-bottom: 18px; font-size: 14px; line-height: 1.6; }

@@ -102,7 +102,8 @@ const OBJECTIVE: Variable[] = [
 
 // Read-only context metrics shown alongside.
 const CONTEXT: Variable[] = [
-  { name: "composite", range: "0 – 1", tag: "objective", desc: "The single score the optimizer climbs: 0.5·reproducibility + 0.25·motif + 0.25·recall (renormalised over available terms)." },
+  { name: "composite", range: "0 – 1", tag: "objective", desc: "The single score the optimizer climbs: 0.5·reproducibility + 0.25·motif + 0.25·recall (renormalised over available terms), then multiplied by the collapse guard below." },
+  { name: "collapse guard", range: "min(1, n/10)", tag: "guard", desc: "The composite is scaled down below ~10 binding sites. With only a handful of sites, reproducibility and motif trivially hit 1.0 — a degenerate 'win'. This ramp makes a 1-site solution score near zero, so the optimizer can't game the score by collapsing." },
   { name: "n_binding_sites", range: "count", tag: "context", desc: "Number of reproducible binding sites produced — watch for collapse." },
   { name: "motif_enrichment", range: "×", tag: "context", desc: "Motif hit-rate divided by the shuffled-background rate; >1× means real signal." },
 ];
