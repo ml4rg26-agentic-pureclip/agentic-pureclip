@@ -14,6 +14,11 @@ DEFAULT_OBJECTIVE_WEIGHTS = {"reproducibility": 0.5, "motif": 0.25, "recall": 0.
 # Backwards-compatible alias (older callers imported this).
 DEFAULT_MOTIF_WEIGHT = DEFAULT_OBJECTIVE_WEIGHTS["motif"]
 
+# Collapse guard: with only a handful of binding sites, reproducibility and motif
+# rate trivially saturate at 1.0 — a degenerate "win". Below this soft floor the
+# composite is ramped down linearly so a 1-site solution scores ~0.
+DEFAULT_MIN_SITES = 10
+
 
 def _objective_terms(report: dict[str, Any]) -> dict[str, float]:
     """Extract the [0, 1] objective terms present in a score report."""
@@ -32,7 +37,22 @@ def _objective_terms(report: dict[str, Any]) -> dict[str, float]:
     return terms
 
 
-def composite_objective(report: dict[str, Any], weights: dict[str, float] | None = None) -> float:
+def yield_factor(report: dict[str, Any], min_sites: int = DEFAULT_MIN_SITES) -> float:
+    """Down-weight scores from too few sites (the collapse failure mode).
+
+    1.0 at/above ``min_sites``, ramping linearly to 0 at zero sites.
+    """
+    n = report.get("n_binding_sites")
+    if n is None or min_sites <= 0:
+        return 1.0
+    return min(1.0, max(0, n) / min_sites)
+
+
+def composite_objective(
+    report: dict[str, Any],
+    weights: dict[str, float] | None = None,
+    min_sites: int = DEFAULT_MIN_SITES,
+) -> float:
     """Blended quality score the agent climbs (all terms in [0, 1]):
 
       * reproducibility — chance-corrected replicate agreement (falls back to the
@@ -40,10 +60,9 @@ def composite_objective(report: dict[str, Any], weights: dict[str, float] | None
       * motif           — fraction of sites carrying the expected RNA motif
       * recall          — fraction of known-strong ENCODE reference regions recovered
 
-    Weights are renormalised over whichever terms are present, so a dataset with
-    no benchmark or no motif still gets a sensible score. The recall term is what
-    stops the agent gaming the score by collapsing binding sites: dropping real
-    sites lowers recall, which lowers the composite.
+    Weights are renormalised over whichever terms are present. The result is then
+    multiplied by a yield factor so collapsing to a handful of sites (where
+    reproducibility/motif trivially hit 1.0) can no longer win.
     """
     weights = weights or DEFAULT_OBJECTIVE_WEIGHTS
     terms = _objective_terms(report)
@@ -52,7 +71,8 @@ def composite_objective(report: dict[str, Any], weights: dict[str, float] | None
     total_w = sum(weights.get(k, 0.0) for k in terms)
     if total_w <= 0:
         return 0.0
-    return float(sum(weights.get(k, 0.0) * v for k, v in terms.items()) / total_w)
+    base = sum(weights.get(k, 0.0) * v for k, v in terms.items()) / total_w
+    return float(base * yield_factor(report, min_sites))
 
 
 def _delta(curr: float | None, prev: float | None) -> str:
@@ -121,6 +141,10 @@ metrics, all in [0, 1]:
 Because recall punishes site collapse and reproducibility is chance-corrected,
 trimming sites to chase agreement no longer helps — you must find sites that are
 reproducible, motif-bearing AND cover the known binding regions.
+
+COLLAPSE GUARD: the composite is multiplied by min(1, n_binding_sites/{DEFAULT_MIN_SITES}).
+Below {DEFAULT_MIN_SITES} sites the score is ramped toward zero, so a handful of
+"perfect" sites is NOT a win. Keep a healthy number of binding sites.
 
 PRIOR KNOWLEDGE:
 {json.dumps(priors, indent=2)}

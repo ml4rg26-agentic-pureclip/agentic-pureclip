@@ -67,3 +67,20 @@ def test_composite_prefers_chance_corrected_reproducibility():
 
 def test_composite_renormalises_over_present_terms():
     assert composite_objective({"reproducibility_score": 0.42}) == 0.42
+
+
+def test_collapse_guard_crushes_tiny_site_counts():
+    # 1 "perfect" site must score far below a real multi-site solution.
+    collapsed = {"reproducibility_score": 1.0, "motif_hit_rate": 1.0,
+                 "benchmark_region_recall": 0.1, "n_binding_sites": 1}
+    real = {"reproducibility_score": 0.43, "motif_hit_rate": 0.36,
+            "benchmark_region_recall": 0.1, "n_binding_sites": 14}
+    assert composite_objective(collapsed) < composite_objective(real)
+    assert composite_objective(collapsed) < 0.15
+
+
+def test_collapse_guard_inactive_above_floor():
+    # At/above the floor the guard does not change the score.
+    rep = {"reproducibility_score": 0.5, "motif_hit_rate": 0.5,
+           "benchmark_region_recall": 0.5, "n_binding_sites": 500}
+    assert composite_objective(rep) == 0.5
