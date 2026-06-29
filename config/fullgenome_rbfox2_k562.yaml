@@ -1,0 +1,32 @@
+# Full-genome validation of the best chr21-tuned RBFOX2_K562 config.
+# learn_on_chr21: false -> PureCLIP runs on the whole genome (slow, ~hours/pass),
+# and benchmark recall uses the full 440-region ENCODE reference (not just chr21).
+# Params are pinned via single-value search_bounds (lo==hi) so the single Optuna
+# trial reproduces exactly the best config (bw=100 dm=14 ic=1 xl=2 fw=9).
+#
+#   PYTHONPATH=. uv run python scripts/overnight_batch.py \
+#       --manifest config/fullgenome_rbfox2_k562.yaml --hours 12 --no-repeat \
+#       --pureclip-dir /vol/storage1/johannes/projects
+
+defaults:
+  threads: 32
+  learn_on_chr21: false
+  per_job_timeout_min: 600
+  optimizer: optuna           # 1 trial, pinned params -> no API key, deterministic
+  objective_weights:
+    reproducibility: 0.5
+    motif: 0.25
+    recall: 0.25
+  search_bounds:
+    pureclip:
+      bandwidth_nt: [100, 100]
+      merge_distance_nt: [14, 14]
+      high_precision_mode: [0, 0]
+      use_input_covariate: [1, 1]
+    postprocessing:
+      min_crosslink_events: [2, 2]
+      force_width: [9, 9]
+      cluster_gap_width: [8, 8]
+
+jobs:
+  - {id: rbfox2_k562_fullgenome, dataset: RBFOX2_K562, max_iter: 1}
