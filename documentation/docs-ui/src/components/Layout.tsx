@@ -1,9 +1,10 @@
 import { NavLink, Outlet } from 'react-router-dom'
 
 const NAV_LINKS = [
-  { to: '/biology', label: 'Biological Background' },
-  { to: '/data',    label: 'Data & Storage' },
-  { to: '/logic',   label: 'System Logic & Flow' },
+  { to: '/bio-terms',    label: 'Glossary' },
+  { to: '/bio-concepts', label: 'Concept Map' },
+  { to: '/data',         label: 'Data & Storage' },
+  { to: '/logic',        label: 'System Logic & Flow' },
 ]
 
 export default function Layout() {
