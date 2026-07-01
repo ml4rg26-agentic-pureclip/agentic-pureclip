@@ -1,22 +1,28 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   useNodesState,
   useEdgesState,
-  Handle,
-  Position,
   BackgroundVariant,
   MarkerType,
   type Node,
   type Edge,
-  type NodeProps,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import dagre from 'dagre'
 import systemMapData from '../data/system-map.json'
 import BioText from '../components/BioText'
+import CustomNode, {
+  DATA_THEME,
+  CATEGORY_THEME,
+  getTheme,
+  estimateNodeHeight,
+  CUSTOM_NODE_WIDTH,
+  type CustomNodeData,
+  type NodeTheme,
+} from '../components/CustomNode'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -36,8 +42,7 @@ interface DataFlow {
   data_transferred: string
 }
 
-// ── Included nodes ─────────────────────────────────────────────────────────
-// Data artifacts (6 pill nodes) + processing steps that connect them (6 rect nodes)
+// ── Included node IDs ──────────────────────────────────────────────────────
 
 const DATA_IDS = new Set([
   'ip_bam_files', 'sminput_bam', 'genome_fasta',
@@ -51,212 +56,104 @@ const PROCESSING_IDS = new Set([
 
 const INCLUDED_IDS = new Set([...DATA_IDS, ...PROCESSING_IDS])
 
-// The evaluate_config → run_config edge creates a cycle.
-// Exclude it from dagre's input but render it dashed in ReactFlow.
-const FEEDBACK_KEY = 'evaluate_config→run_config'
-
-// ── Styling ────────────────────────────────────────────────────────────────
-
-const DATA_STYLE = {
-  border:   '#0ea5e9',
-  bg:       '#082f49',
-  text:     '#bae6fd',
-  label:    '#38bdf8',
-  minimap:  '#0ea5e9',
+function nodeTheme(comp: Component): NodeTheme {
+  return DATA_IDS.has(comp.id) ? DATA_THEME : getTheme(comp.category)
 }
 
-const PROC_THEME: Record<string, { border: string; bg: string; text: string; label: string; minimap: string }> = {
-  'External Tool': { border: '#ef4444', bg: '#2a0a0a', text: '#fee2e2', label: '#fca5a5', minimap: '#ef4444' },
-  Internal:        { border: '#10b981', bg: '#022c22', text: '#d1fae5', label: '#6ee7b7', minimap: '#10b981' },
-  Scorer:          { border: '#06b6d4', bg: '#071f26', text: '#cffafe', label: '#67e8f9', minimap: '#06b6d4' },
-}
+// ── Dagre layout helper ────────────────────────────────────────────────────
 
-const FALLBACK_PROC = { border: '#6b7280', bg: '#1f2937', text: '#f3f4f6', label: '#9ca3af', minimap: '#6b7280' }
+const DAGRE_CFG = { rankdir: 'LR', nodesep: 50, ranksep: 140, marginx: 50, marginy: 50 } as const
 
-function procTheme(cat: string) {
-  return PROC_THEME[cat] ?? FALLBACK_PROC
-}
-
-// ── Node dimensions ────────────────────────────────────────────────────────
-
-const DATA_W = 175
-const DATA_H = 46
-const PROC_W = 190
-const PROC_H = 68
-
-// ── Dagre layout ───────────────────────────────────────────────────────────
-
-function getLayoutedElements(nodes: Node[], dagreEdges: Edge[], allEdges: Edge[]) {
+function runDagre(nodes: Node[], dagreEdges: Array<{ source: string; target: string }>) {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'LR', nodesep: 40, ranksep: 100, marginx: 40, marginy: 40 })
+  g.setGraph(DAGRE_CFG)
 
   nodes.forEach((n) => {
-    const isData = DATA_IDS.has(n.id)
-    g.setNode(n.id, { width: isData ? DATA_W : PROC_W, height: isData ? DATA_H : PROC_H })
+    const comp = n.data as Component
+    const h = (n.height ?? 0) > 0
+      ? n.height!
+      : estimateNodeHeight(comp.inputs, comp.outputs)
+    const w = (n.width ?? 0) > 0 ? n.width! : CUSTOM_NODE_WIDTH
+    g.setNode(n.id, { width: w, height: h })
   })
   dagreEdges.forEach((e) => g.setEdge(e.source, e.target))
 
   dagre.layout(g)
 
-  return {
-    nodes: nodes.map((n) => {
-      const isData = DATA_IDS.has(n.id)
-      const w = isData ? DATA_W : PROC_W
-      const h = isData ? DATA_H : PROC_H
-      const { x, y } = g.node(n.id)
-      return { ...n, position: { x: x - w / 2, y: y - h / 2 } }
-    }),
-    edges: allEdges,
-  }
+  return nodes.map((n) => {
+    const { x, y } = g.node(n.id)
+    const w = (n.width ?? 0) > 0 ? n.width! : CUSTOM_NODE_WIDTH
+    const h = (n.height ?? 0) > 0
+      ? n.height!
+      : estimateNodeHeight((n.data as Component).inputs, (n.data as Component).outputs)
+    return { ...n, position: { x: x - w / 2, y: y - h / 2 } }
+  })
 }
 
-// ── Custom node: DataFileNode (pill shape) ─────────────────────────────────
+// ── Static graph data (built once at module load) ──────────────────────────
 
-function DataFileNode({ data }: NodeProps) {
-  const comp = data as Component
-  return (
-    <div
-      style={{
-        width: DATA_W,
-        height: DATA_H,
-        background: DATA_STYLE.bg,
-        border: `2px solid ${DATA_STYLE.border}`,
-        borderRadius: 999,
-        padding: '0 16px',
-        display: 'flex',
-        alignItems: 'center',
-        cursor: 'pointer',
-        userSelect: 'none',
-        boxSizing: 'border-box',
-      }}
-    >
-      <Handle type="target" position={Position.Left}  style={{ opacity: 0, pointerEvents: 'none' }} />
-      <Handle type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: 'none' }} />
-      <span
-        style={{
-          color: DATA_STYLE.text,
-          fontSize: 11,
-          fontWeight: 600,
-          lineHeight: 1.3,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          width: '100%',
-        }}
-      >
-        {comp.name}
-      </span>
-    </div>
-  )
-}
+const ALL_COMPONENTS  = systemMapData.components as Component[]
+const ALL_FLOWS       = systemMapData.data_flow  as DataFlow[]
+const COMP_MAP        = new Map(ALL_COMPONENTS.map((c) => [c.id, c]))
 
-// ── Custom node: ProcessingNode (rounded rect) ────────────────────────────
+const GRAPH_NODES: Node[] = ALL_COMPONENTS
+  .filter((c) => INCLUDED_IDS.has(c.id))
+  .map((c) => ({
+    id:       c.id,
+    type:     'custom' as const,
+    position: { x: 0, y: 0 },
+    data:     { ...c, _theme: nodeTheme(c), _vertical: false } as CustomNodeData & Component,
+  }))
 
-function ProcessingNode({ data }: NodeProps) {
-  const comp = data as Component
-  const t = procTheme(comp.category)
-  return (
-    <div
-      style={{
-        width: PROC_W,
-        height: PROC_H,
-        background: t.bg,
-        border: `2px solid ${t.border}`,
-        borderRadius: 8,
-        padding: '8px 14px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        userSelect: 'none',
-        boxSizing: 'border-box',
-      }}
-    >
-      <Handle type="target" position={Position.Left}  style={{ opacity: 0, pointerEvents: 'none' }} />
-      <Handle type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: 'none' }} />
-      <div style={{ color: t.label, fontSize: 9, fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>
-        {comp.category.toUpperCase()}
-      </div>
-      <div
-        style={{
-          color: t.text,
-          fontSize: 12,
-          fontWeight: 600,
-          lineHeight: 1.35,
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-        }}
-      >
-        {comp.name}
-      </div>
-    </div>
-  )
-}
+// The feedback edge (evaluate_config → run_config) creates a DAG cycle;
+// exclude it from dagre but keep it in ReactFlow as a dashed edge.
+const FEEDBACK_SOURCE = 'evaluate_config'
+const FEEDBACK_TARGET = 'run_config'
 
-const NODE_TYPES = { datafile: DataFileNode, processing: ProcessingNode }
+const GRAPH_EDGES: Edge[] = []
+const DAGRE_EDGE_PAIRS: Array<{ source: string; target: string }> = []
 
-// ── Build graph from JSON ──────────────────────────────────────────────────
+ALL_FLOWS
+  .filter((df) => INCLUDED_IDS.has(df.source_id) && INCLUDED_IDS.has(df.target_id))
+  .forEach((df, i) => {
+    const isFeedback = df.source_id === FEEDBACK_SOURCE && df.target_id === FEEDBACK_TARGET
+    const srcComp    = COMP_MAP.get(df.source_id)
+    const edgeColor  = srcComp
+      ? (DATA_IDS.has(srcComp.id) ? DATA_THEME.border : getTheme(srcComp.category).border)
+      : '#6b7280'
+    const label = df.data_transferred.length > 44
+      ? df.data_transferred.slice(0, 44) + '…'
+      : df.data_transferred
 
-const ALL_COMPONENTS = systemMapData.components as Component[]
-const ALL_FLOWS = systemMapData.data_flow as DataFlow[]
-const COMP_MAP = new Map(ALL_COMPONENTS.map((c) => [c.id, c]))
-
-function buildGraph() {
-  const nodes: Node[] = ALL_COMPONENTS
-    .filter((c) => INCLUDED_IDS.has(c.id))
-    .map((c) => ({
-      id: c.id,
-      type: DATA_IDS.has(c.id) ? 'datafile' : 'processing',
-      position: { x: 0, y: 0 },
-      data: { ...c },
-    }))
-
-  const allEdges: Edge[] = []
-  const dagreEdges: Edge[] = []
-
-  ALL_FLOWS
-    .filter((df) => INCLUDED_IDS.has(df.source_id) && INCLUDED_IDS.has(df.target_id))
-    .forEach((df, i) => {
-      const edgeKey = `${df.source_id}→${df.target_id}`
-      const isFeedback = edgeKey === FEEDBACK_KEY
-
-      const srcComp = COMP_MAP.get(df.source_id)
-      const edgeColor = srcComp
-        ? (DATA_IDS.has(srcComp.id) ? DATA_STYLE.border : procTheme(srcComp.category).border)
-        : '#6b7280'
-
-      const label = df.data_transferred.length > 42
-        ? df.data_transferred.slice(0, 42) + '…'
-        : df.data_transferred
-
-      const edge: Edge = {
-        id: `e-${i}`,
-        source: df.source_id,
-        target: df.target_id,
-        label,
-        labelStyle:  { fontSize: 9, fill: '#9ca3af' },
-        labelBgStyle: { fill: '#111827', fillOpacity: 0.9 },
-        style: {
-          stroke: edgeColor,
-          strokeWidth: 1.5,
-          strokeDasharray: isFeedback ? '5 4' : undefined,
-        },
-        markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
-        type: 'smoothstep',
-        animated: !isFeedback,
-      }
-
-      allEdges.push(edge)
-      if (!isFeedback) dagreEdges.push(edge)
+    GRAPH_EDGES.push({
+      id:            `e-${i}`,
+      source:        df.source_id,
+      target:        df.target_id,
+      label,
+      labelStyle:    { fontSize: 9, fill: '#9ca3af' },
+      labelBgStyle:  { fill: '#0f172a', fillOpacity: 0.9 },
+      style: {
+        stroke:          edgeColor,
+        strokeWidth:     1.5,
+        strokeDasharray: isFeedback ? '5 4' : undefined,
+      },
+      markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
+      type:      'smoothstep',
+      animated:  !isFeedback,
     })
 
-  return getLayoutedElements(nodes, dagreEdges, allEdges)
-}
+    if (!isFeedback) DAGRE_EDGE_PAIRS.push({ source: df.source_id, target: df.target_id })
+  })
 
-// ── Side panel ─────────────────────────────────────────────────────────────
+// First-pass estimated positions (displayed immediately; corrected after measurement)
+const INITIAL_NODES = runDagre(GRAPH_NODES, DAGRE_EDGE_PAIRS)
+
+// ── Custom node registry ───────────────────────────────────────────────────
+
+const NODE_TYPES = { custom: CustomNode }
+
+// ── Progressive-disclosure side panel ─────────────────────────────────────
 
 function PanelSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -268,15 +165,16 @@ function PanelSection({ label, children }: { label: string; children: React.Reac
 }
 
 function SidePanel({ component, onClose }: { component: Component; onClose: () => void }) {
-  const isData = DATA_IDS.has(component.id)
-  const border  = isData ? DATA_STYLE.border : procTheme(component.category).border
-  const label   = isData ? DATA_STYLE.label  : procTheme(component.category).label
-  const bg      = isData ? DATA_STYLE.bg     : procTheme(component.category).bg
+  const [expanded, setExpanded] = useState(false)
+  const t = nodeTheme(component)
+
+  // Reset accordion when the user selects a different node
+  useEffect(() => { setExpanded(false) }, [component.id])
 
   return (
     <div
       className="absolute top-3 right-3 w-80 rounded-xl overflow-y-auto z-10"
-      style={{ maxHeight: 'calc(100% - 24px)', background: '#0f172a', border: `2px solid ${border}` }}
+      style={{ maxHeight: 'calc(100% - 24px)', background: '#0f172a', border: `2px solid ${t.border}` }}
     >
       {/* Sticky header */}
       <div
@@ -286,7 +184,7 @@ function SidePanel({ component, onClose }: { component: Component; onClose: () =
         <div className="min-w-0">
           <span
             className="inline-block text-xs rounded px-2 py-0.5 mb-1 font-semibold"
-            style={{ background: bg, color: label, border: `1px solid ${border}` }}
+            style={{ background: t.bg, color: t.label, border: `1px solid ${t.border}` }}
           >
             {component.category}
           </span>
@@ -300,54 +198,74 @@ function SidePanel({ component, onClose }: { component: Component; onClose: () =
         </button>
       </div>
 
-      {/* Body */}
-      <div className="px-4 py-4 space-y-4">
-        {/* Description with BioText tooltips */}
+      {/* Always-visible: description */}
+      <div className="px-4 pt-4 pb-3">
         <p className="text-gray-300 text-xs leading-relaxed">
           <BioText text={component.description} />
         </p>
-
-        {component.inputs.length > 0 && (
-          <PanelSection label="Inputs">
-            <ul className="space-y-1">
-              {component.inputs.map((inp, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
-                  <span className="text-blue-400 shrink-0 mt-0.5 font-bold">←</span>
-                  <span className="leading-relaxed"><BioText text={inp} /></span>
-                </li>
-              ))}
-            </ul>
-          </PanelSection>
-        )}
-
-        {component.outputs.length > 0 && (
-          <PanelSection label="Outputs">
-            <ul className="space-y-1">
-              {component.outputs.map((out, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
-                  <span className="text-emerald-400 shrink-0 mt-0.5 font-bold">→</span>
-                  <span className="leading-relaxed"><BioText text={out} /></span>
-                </li>
-              ))}
-            </ul>
-          </PanelSection>
-        )}
-
-        {component.adjustable_parameters.length > 0 && (
-          <PanelSection label="Key Parameters">
-            <ul className="space-y-1.5">
-              {component.adjustable_parameters.map((p, i) => (
-                <li
-                  key={i}
-                  className="text-xs font-mono bg-gray-900 text-gray-300 rounded px-2.5 py-1.5 leading-relaxed border border-gray-800"
-                >
-                  {p}
-                </li>
-              ))}
-            </ul>
-          </PanelSection>
-        )}
       </div>
+
+      {/* Progressive disclosure toggle */}
+      <div className="px-4 pb-3">
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full flex items-center justify-between text-xs font-medium rounded-lg px-3 py-2 transition-colors"
+          style={{
+            background:  expanded ? t.bg : '#1e293b',
+            color:       expanded ? t.label : '#94a3b8',
+            border:      `1px solid ${expanded ? t.border : '#334155'}`,
+          }}
+        >
+          <span>{expanded ? 'Hide details' : 'Show details'}</span>
+          <span>{expanded ? '▲' : '▼'}</span>
+        </button>
+      </div>
+
+      {/* Collapsible detail sections */}
+      {expanded && (
+        <div className="px-4 pb-5 space-y-4 border-t border-gray-800 pt-4">
+          {component.inputs.length > 0 && (
+            <PanelSection label="Inputs">
+              <ul className="space-y-1">
+                {component.inputs.map((inp, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
+                    <span className="text-blue-400 shrink-0 mt-0.5 font-bold">←</span>
+                    <span className="leading-relaxed"><BioText text={inp} /></span>
+                  </li>
+                ))}
+              </ul>
+            </PanelSection>
+          )}
+
+          {component.outputs.length > 0 && (
+            <PanelSection label="Outputs">
+              <ul className="space-y-1">
+                {component.outputs.map((out, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
+                    <span className="text-emerald-400 shrink-0 mt-0.5 font-bold">→</span>
+                    <span className="leading-relaxed"><BioText text={out} /></span>
+                  </li>
+                ))}
+              </ul>
+            </PanelSection>
+          )}
+
+          {component.adjustable_parameters.length > 0 && (
+            <PanelSection label="Key Parameters">
+              <ul className="space-y-1.5">
+                {component.adjustable_parameters.map((p, i) => (
+                  <li
+                    key={i}
+                    className="text-xs font-mono bg-gray-900 text-gray-300 rounded px-2.5 py-1.5 leading-relaxed border border-gray-800"
+                  >
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </PanelSection>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -355,28 +273,45 @@ function SidePanel({ component, onClose }: { component: Component; onClose: () =
 // ── Legend ─────────────────────────────────────────────────────────────────
 
 const LEGEND = [
-  { label: 'Data artifact',  color: DATA_STYLE.border,              pill: true  },
-  { label: 'External Tool',  color: PROC_THEME['External Tool'].border, pill: false },
-  { label: 'Internal step',  color: PROC_THEME.Internal.border,     pill: false },
-  { label: 'Scorer',         color: PROC_THEME.Scorer.border,       pill: false },
+  { label: 'Data artifact', color: DATA_THEME.border },
+  ...['External Tool', 'Internal', 'Scorer'].map((cat) => ({
+    label: cat,
+    color: CATEGORY_THEME[cat]?.border ?? '#6b7280',
+  })),
 ]
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function DataPage() {
-  const { nodes: layoutedNodes, edges: layoutedEdges } = useMemo(() => buildGraph(), [])
+  const [nodes, setNodes, onNodesChange] = useNodesState(INITIAL_NODES)
+  const [edges, , onEdgesChange]         = useEdgesState(GRAPH_EDGES)
+  const [selected, setSelected]          = useState<Component | null>(null)
 
-  const [nodes, , onNodesChange] = useNodesState(layoutedNodes)
-  const [edges, , onEdgesChange] = useEdgesState(layoutedEdges)
-  const [selected, setSelected] = useState<Component | null>(null)
+  const layoutApplied = useRef(false)
+  const rfInstance    = useRef<{ fitView: (opts?: { padding?: number }) => void } | null>(null)
+
+  // Second-pass: re-run dagre once React Flow reports actual node dimensions.
+  // node.width / node.height are populated by React Flow v11 after the first render.
+  useEffect(() => {
+    if (layoutApplied.current) return
+    if (!nodes.length) return
+
+    const allSized = nodes.every((n) => (n.width ?? 0) > 0 && (n.height ?? 0) > 0)
+    if (!allSized) return
+
+    layoutApplied.current = true
+
+    const corrected = runDagre(nodes, DAGRE_EDGE_PAIRS)
+    setNodes(corrected)
+
+    setTimeout(() => rfInstance.current?.fitView({ padding: 0.12 }), 50)
+  }, [nodes, setNodes])
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelected(node.data as Component)
   }, [])
 
-  const onPaneClick = useCallback(() => {
-    setSelected(null)
-  }, [])
+  const onPaneClick = useCallback(() => setSelected(null), [])
 
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 3.5rem)' }}>
@@ -385,26 +320,19 @@ export default function DataPage() {
         <div>
           <h1 className="text-base font-bold text-white leading-none">Data Provenance</h1>
           <p className="text-gray-500 text-xs mt-0.5">
-            {INCLUDED_IDS.size} components · {layoutedEdges.length} data flows · click any node to inspect
+            {INCLUDED_IDS.size} components · {GRAPH_EDGES.length} data flows · click any node to inspect
           </p>
         </div>
 
-        {/* Legend */}
         <div className="ml-auto flex items-center gap-4 flex-wrap">
-          {LEGEND.map(({ label, color, pill }) => (
+          {LEGEND.map(({ label, color }) => (
             <span key={label} className="flex items-center gap-1.5 text-xs text-gray-400">
-              <span
-                className="w-5 h-3 shrink-0 inline-block border-2"
-                style={{ borderColor: color, borderRadius: pill ? 999 : 2 }}
-              />
+              <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: color }} />
               {label}
             </span>
           ))}
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
-            <span
-              className="w-5 shrink-0 inline-block"
-              style={{ borderTop: '2px dashed #6b7280' }}
-            />
+            <span className="w-5 shrink-0 inline-block" style={{ borderTop: '2px dashed #6b7280' }} />
             Feedback edge
           </span>
         </div>
@@ -419,13 +347,14 @@ export default function DataPage() {
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
+          onInit={(inst) => { rfInstance.current = inst }}
           nodeTypes={NODE_TYPES}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={true}
           fitView
-          fitViewOptions={{ padding: 0.1 }}
-          minZoom={0.2}
+          fitViewOptions={{ padding: 0.12 }}
+          minZoom={0.15}
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
         >
@@ -434,8 +363,8 @@ export default function DataPage() {
           <MiniMap
             nodeColor={(n) =>
               DATA_IDS.has(n.id)
-                ? DATA_STYLE.minimap
-                : procTheme((n.data as Component).category).minimap
+                ? DATA_THEME.minimap
+                : getTheme((n.data as Component).category).minimap
             }
             maskColor="rgba(0,0,0,0.65)"
             style={{ background: '#111827', border: '1px solid #374151' }}

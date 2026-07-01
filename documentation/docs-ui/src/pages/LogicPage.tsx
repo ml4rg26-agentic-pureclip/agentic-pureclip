@@ -1,21 +1,25 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import ReactFlow, {
   Background,
   Controls,
   MiniMap,
   useNodesState,
   useEdgesState,
-  type Node,
-  type Edge,
-  type NodeProps,
-  Handle,
-  Position,
   BackgroundVariant,
   MarkerType,
+  type Node,
+  type Edge,
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import dagre from 'dagre'
 import systemMapData from '../data/system-map.json'
+import CustomNode, {
+  CATEGORY_THEME,
+  getTheme,
+  estimateNodeHeight,
+  CUSTOM_NODE_WIDTH,
+  type CustomNodeData,
+} from '../components/CustomNode'
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -27,7 +31,6 @@ interface Component {
   inputs: string[]
   outputs: string[]
   adjustable_parameters: string[]
-  // project_math can be a plain string, a flat Record, or a nested Record (e.g. dashboard_ui)
   project_math?: string | Record<string, unknown>
 }
 
@@ -37,156 +40,81 @@ interface DataFlow {
   data_transferred: string
 }
 
-// ── Category styling ───────────────────────────────────────────────────────
+// ── Dagre layout helper ────────────────────────────────────────────────────
 
-const CATEGORY_THEME: Record<string, { border: string; bg: string; label: string; text: string; minimap: string }> = {
-  Optimizer:       { border: '#6366f1', bg: '#1e1b4b', label: '#a5b4fc', text: '#e0e7ff', minimap: '#6366f1' },
-  Orchestrator:    { border: '#f59e0b', bg: '#1c1400', label: '#fcd34d', text: '#fef3c7', minimap: '#f59e0b' },
-  Internal:        { border: '#10b981', bg: '#022c22', label: '#6ee7b7', text: '#d1fae5', minimap: '#10b981' },
-  'External Tool': { border: '#ef4444', bg: '#2a0a0a', label: '#fca5a5', text: '#fee2e2', minimap: '#ef4444' },
-  Scorer:          { border: '#06b6d4', bg: '#071f26', label: '#67e8f9', text: '#cffafe', minimap: '#06b6d4' },
-  Service:         { border: '#8b5cf6', bg: '#1a0a2e', label: '#c4b5fd', text: '#ede9fe', minimap: '#8b5cf6' },
-  UI:              { border: '#ec4899', bg: '#2d0a1e', label: '#f9a8d4', text: '#fce7f3', minimap: '#ec4899' },
-}
+const DAGRE_CFG = { rankdir: 'TB', nodesep: 60, ranksep: 80, marginx: 50, marginy: 50 } as const
 
-const DEFAULT_THEME = { border: '#6b7280', bg: '#1f2937', label: '#9ca3af', text: '#f3f4f6', minimap: '#6b7280' }
-
-function theme(category: string) {
-  return CATEGORY_THEME[category] ?? DEFAULT_THEME
-}
-
-// ── Dagre TB layout ────────────────────────────────────────────────────────
-// rankdir: 'TB' renders the pipeline as descending architectural layers:
-//   samtools_merge → pureclip → postprocessor / scorer → composite_objective
-//   → evaluate_config → optimizers → overnight_batch → monitor_api → dashboard_ui
-
-const NODE_W = 210
-const NODE_H = 76
-
-function getLayoutedElements(nodes: Node[], edges: Edge[]) {
+function runDagre(nodes: Node[], edges: Edge[]) {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
-  g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 80, marginx: 50, marginy: 50 })
+  g.setGraph(DAGRE_CFG)
 
-  nodes.forEach((n) => g.setNode(n.id, { width: NODE_W, height: NODE_H }))
+  nodes.forEach((n) => {
+    const comp = n.data as Component
+    const h = (n.height ?? 0) > 0
+      ? n.height!
+      : estimateNodeHeight(comp.inputs, comp.outputs)
+    const w = (n.width ?? 0) > 0 ? n.width! : CUSTOM_NODE_WIDTH
+    g.setNode(n.id, { width: w, height: h })
+  })
   edges.forEach((e) => g.setEdge(e.source, e.target))
 
   dagre.layout(g)
 
-  return {
-    nodes: nodes.map((n) => {
-      const { x, y } = g.node(n.id)
-      return { ...n, position: { x: x - NODE_W / 2, y: y - NODE_H / 2 } }
-    }),
-    edges,
-  }
+  return nodes.map((n) => {
+    const { x, y } = g.node(n.id)
+    const w = (n.width  ?? 0) > 0 ? n.width!  : CUSTOM_NODE_WIDTH
+    const h = (n.height ?? 0) > 0 ? n.height! : estimateNodeHeight((n.data as Component).inputs, (n.data as Component).outputs)
+    return { ...n, position: { x: x - w / 2, y: y - h / 2 } }
+  })
 }
 
-// ── Custom node: PipelineNode ──────────────────────────────────────────────
-// Handles sit at Top (target) and Bottom (source) to match TB edge routing.
-
-function PipelineNode({ data }: NodeProps) {
-  const t = theme(data.category as string)
-  return (
-    <div
-      style={{
-        width: NODE_W,
-        height: NODE_H,
-        background: t.bg,
-        border: `2px solid ${t.border}`,
-        borderRadius: 10,
-        padding: '10px 14px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        cursor: 'pointer',
-        userSelect: 'none',
-        boxSizing: 'border-box',
-      }}
-    >
-      <Handle
-        type="target"
-        position={Position.Top}
-        style={{ background: t.border, width: 8, height: 8, border: 'none' }}
-      />
-      <div style={{ color: t.label, fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', marginBottom: 4 }}>
-        {(data.category as string).toUpperCase()}
-      </div>
-      <div
-        style={{
-          color: t.text,
-          fontSize: 13,
-          fontWeight: 600,
-          lineHeight: 1.3,
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-        }}
-      >
-        {data.name as string}
-      </div>
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        style={{ background: t.border, width: 8, height: 8, border: 'none' }}
-      />
-    </div>
-  )
-}
-
-const NODE_TYPES = { pipeline: PipelineNode }
-
-// ── Build nodes & edges ────────────────────────────────────────────────────
+// ── Static graph data (built once at module load) ──────────────────────────
 
 const ALL_COMPONENTS = systemMapData.components as Component[]
-const ALL_FLOWS = systemMapData.data_flow as DataFlow[]
+const ALL_FLOWS      = systemMapData.data_flow  as DataFlow[]
 
-const NON_DATA = ALL_COMPONENTS.filter((c) => c.category !== 'Data')
+const NON_DATA    = ALL_COMPONENTS.filter((c) => c.category !== 'Data')
 const NON_DATA_IDS = new Set(NON_DATA.map((c) => c.id))
 
-function buildGraph() {
-  const rawNodes: Node[] = NON_DATA.map((c) => ({
-    id: c.id,
-    type: 'pipeline',
-    position: { x: 0, y: 0 },
-    data: { ...c },
-  }))
+const GRAPH_NODES: Node[] = NON_DATA.map((c) => ({
+  id:       c.id,
+  type:     'custom' as const,
+  position: { x: 0, y: 0 },
+  data:     { ...c, _theme: getTheme(c.category), _vertical: true } as CustomNodeData & Component,
+}))
 
-  const seen = new Set<string>()
-  const rawEdges: Edge[] = ALL_FLOWS
-    .filter((df) => NON_DATA_IDS.has(df.source_id) && NON_DATA_IDS.has(df.target_id))
-    .map((df, i) => {
-      const key = `${df.source_id}→${df.target_id}`
-      const isDupe = seen.has(key)
-      seen.add(key)
-      const src = NON_DATA.find((c) => c.id === df.source_id)
-      const edgeColor = src ? theme(src.category).border : '#6b7280'
-      const label = df.data_transferred.length > 48
-        ? df.data_transferred.slice(0, 48) + '…'
-        : df.data_transferred
-      return {
-        id: `e-${i}`,
-        source: df.source_id,
-        target: df.target_id,
-        label: isDupe ? undefined : label,
-        labelStyle: { fontSize: 9, fill: '#9ca3af' },
-        labelBgStyle: { fill: '#0f172a', fillOpacity: 0.9 },
-        animated: true,
-        style: { stroke: edgeColor, strokeWidth: 1.5 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: edgeColor },
-        type: 'smoothstep',
-      } satisfies Edge
-    })
+const GRAPH_EDGES: Edge[] = ALL_FLOWS
+  .filter((df) => NON_DATA_IDS.has(df.source_id) && NON_DATA_IDS.has(df.target_id))
+  .map((df, i) => {
+    const src        = NON_DATA.find((c) => c.id === df.source_id)
+    const edgeColor  = src ? getTheme(src.category).border : '#6b7280'
+    const label = df.data_transferred.length > 48
+      ? df.data_transferred.slice(0, 48) + '…'
+      : df.data_transferred
+    return {
+      id:           `e-${i}`,
+      source:       df.source_id,
+      target:       df.target_id,
+      label,
+      labelStyle:   { fontSize: 9, fill: '#9ca3af' },
+      labelBgStyle: { fill: '#0f172a', fillOpacity: 0.9 },
+      animated:     true,
+      style:        { stroke: edgeColor, strokeWidth: 1.5 },
+      markerEnd:    { type: MarkerType.ArrowClosed, color: edgeColor },
+      type:         'smoothstep',
+    } satisfies Edge
+  })
 
-  return getLayoutedElements(rawNodes, rawEdges)
-}
+// No cycles among non-Data nodes — all edges go to dagre.
+const INITIAL_NODES = runDagre(GRAPH_NODES, GRAPH_EDGES)
+
+// ── Custom node registry ───────────────────────────────────────────────────
+
+const NODE_TYPES = { custom: CustomNode }
 
 // ── Math renderer ──────────────────────────────────────────────────────────
-// project_math can be:
-//   • string          → single formula block
-//   • Record<string, string>                 → named formula sections (e.g. scorer)
-//   • Record<string, Record<string, string>> → nested sections (e.g. dashboard_ui.pages)
+// project_math is: string | Record<string, string> | Record<string, Record<string,string>>
 
 function MathValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
   if (typeof value === 'string') {
@@ -230,7 +158,7 @@ function ParamChip({ param, accentColor }: { param: string; accentColor: string 
   )
 }
 
-// ── Side panel ─────────────────────────────────────────────────────────────
+// ── Progressive-disclosure side panel ─────────────────────────────────────
 
 function PanelSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -242,7 +170,11 @@ function PanelSection({ label, children }: { label: string; children: React.Reac
 }
 
 function SidePanel({ component, onClose }: { component: Component; onClose: () => void }) {
-  const t = theme(component.category)
+  const [expanded, setExpanded] = useState(false)
+  const t = getTheme(component.category)
+
+  // Reset accordion when the user selects a different node
+  useEffect(() => { setExpanded(false) }, [component.id])
 
   return (
     <div
@@ -251,7 +183,7 @@ function SidePanel({ component, onClose }: { component: Component; onClose: () =
     >
       {/* Sticky header */}
       <div
-        className="sticky top-0 flex items-start justify-between gap-2 px-4 pt-4 pb-3 border-b border-gray-800"
+        className="sticky top-0 px-4 pt-4 pb-3 border-b border-gray-800 flex items-start justify-between gap-2"
         style={{ background: '#0f172a' }}
       >
         <div className="min-w-0">
@@ -271,56 +203,73 @@ function SidePanel({ component, onClose }: { component: Component; onClose: () =
         </button>
       </div>
 
-      <div className="px-4 py-4 space-y-5">
-        {/* Description */}
+      {/* Always-visible: description */}
+      <div className="px-4 pt-4 pb-3">
         <p className="text-gray-300 text-xs leading-relaxed">{component.description}</p>
-
-        {/* Adjustable parameters as structured chips */}
-        {component.adjustable_parameters.length > 0 && (
-          <PanelSection label="Adjustable Parameters">
-            <div className="space-y-2">
-              {component.adjustable_parameters.map((p, i) => (
-                <ParamChip key={i} param={p} accentColor={t.label} />
-              ))}
-            </div>
-          </PanelSection>
-        )}
-
-        {/* Inputs */}
-        {component.inputs.length > 0 && (
-          <PanelSection label="Inputs">
-            <ul className="space-y-1">
-              {component.inputs.map((inp, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
-                  <span className="text-blue-400 shrink-0 mt-0.5 font-bold">←</span>
-                  <span className="leading-relaxed">{inp}</span>
-                </li>
-              ))}
-            </ul>
-          </PanelSection>
-        )}
-
-        {/* Outputs */}
-        {component.outputs.length > 0 && (
-          <PanelSection label="Outputs">
-            <ul className="space-y-1">
-              {component.outputs.map((out, i) => (
-                <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
-                  <span className="text-emerald-400 shrink-0 mt-0.5 font-bold">→</span>
-                  <span className="leading-relaxed">{out}</span>
-                </li>
-              ))}
-            </ul>
-          </PanelSection>
-        )}
-
-        {/* Logic / Math */}
-        {component.project_math !== undefined && (
-          <PanelSection label="Logic / Math">
-            <MathValue value={component.project_math} />
-          </PanelSection>
-        )}
       </div>
+
+      {/* Progressive disclosure toggle */}
+      <div className="px-4 pb-3">
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="w-full flex items-center justify-between text-xs font-medium rounded-lg px-3 py-2 transition-colors"
+          style={{
+            background: expanded ? t.bg : '#1e293b',
+            color:      expanded ? t.label : '#94a3b8',
+            border:     `1px solid ${expanded ? t.border : '#334155'}`,
+          }}
+        >
+          <span>{expanded ? 'Hide details' : 'Show details'}</span>
+          <span>{expanded ? '▲' : '▼'}</span>
+        </button>
+      </div>
+
+      {/* Collapsible detail sections */}
+      {expanded && (
+        <div className="px-4 pb-5 space-y-5 border-t border-gray-800 pt-4">
+          {component.inputs.length > 0 && (
+            <PanelSection label="Inputs">
+              <ul className="space-y-1">
+                {component.inputs.map((inp, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
+                    <span className="text-blue-400 shrink-0 mt-0.5 font-bold">←</span>
+                    <span className="leading-relaxed">{inp}</span>
+                  </li>
+                ))}
+              </ul>
+            </PanelSection>
+          )}
+
+          {component.outputs.length > 0 && (
+            <PanelSection label="Outputs">
+              <ul className="space-y-1">
+                {component.outputs.map((out, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
+                    <span className="text-emerald-400 shrink-0 mt-0.5 font-bold">→</span>
+                    <span className="leading-relaxed">{out}</span>
+                  </li>
+                ))}
+              </ul>
+            </PanelSection>
+          )}
+
+          {component.adjustable_parameters.length > 0 && (
+            <PanelSection label="Adjustable Parameters">
+              <div className="space-y-2">
+                {component.adjustable_parameters.map((p, i) => (
+                  <ParamChip key={i} param={p} accentColor={t.label} />
+                ))}
+              </div>
+            </PanelSection>
+          )}
+
+          {component.project_math !== undefined && (
+            <PanelSection label="Logic / Math">
+              <MathValue value={component.project_math} />
+            </PanelSection>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -328,19 +277,34 @@ function SidePanel({ component, onClose }: { component: Component; onClose: () =
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function LogicPage() {
-  const { nodes: layoutedNodes, edges: layoutedEdges } = useMemo(() => buildGraph(), [])
+  const [nodes, setNodes, onNodesChange] = useNodesState(INITIAL_NODES)
+  const [edges, , onEdgesChange]         = useEdgesState(GRAPH_EDGES)
+  const [selected, setSelected]          = useState<Component | null>(null)
 
-  const [nodes, , onNodesChange] = useNodesState(layoutedNodes)
-  const [edges, , onEdgesChange] = useEdgesState(layoutedEdges)
-  const [selected, setSelected] = useState<Component | null>(null)
+  const layoutApplied = useRef(false)
+  const rfInstance    = useRef<{ fitView: (opts?: { padding?: number }) => void } | null>(null)
+
+  // Second-pass: re-run dagre once React Flow reports actual node dimensions.
+  useEffect(() => {
+    if (layoutApplied.current) return
+    if (!nodes.length) return
+
+    const allSized = nodes.every((n) => (n.width ?? 0) > 0 && (n.height ?? 0) > 0)
+    if (!allSized) return
+
+    layoutApplied.current = true
+
+    const corrected = runDagre(nodes, GRAPH_EDGES)
+    setNodes(corrected)
+
+    setTimeout(() => rfInstance.current?.fitView({ padding: 0.12 }), 50)
+  }, [nodes, setNodes])
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelected(node.data as Component)
   }, [])
 
-  const onPaneClick = useCallback(() => {
-    setSelected(null)
-  }, [])
+  const onPaneClick = useCallback(() => setSelected(null), [])
 
   return (
     <div className="flex flex-col" style={{ height: 'calc(100vh - 3.5rem)' }}>
@@ -349,11 +313,10 @@ export default function LogicPage() {
         <div>
           <h1 className="text-base font-bold text-white leading-none">System Logic & Flow</h1>
           <p className="text-gray-500 text-xs mt-0.5">
-            {NON_DATA.length} components · {layoutedEdges.length} connections · click any node to inspect
+            {NON_DATA.length} components · {GRAPH_EDGES.length} connections · click any node to inspect
           </p>
         </div>
 
-        {/* Category legend */}
         <div className="ml-auto flex items-center gap-3 flex-wrap">
           {Object.entries(CATEGORY_THEME).map(([cat, t]) => (
             <span key={cat} className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -373,20 +336,21 @@ export default function LogicPage() {
           onEdgesChange={onEdgesChange}
           onNodeClick={onNodeClick}
           onPaneClick={onPaneClick}
+          onInit={(inst) => { rfInstance.current = inst }}
           nodeTypes={NODE_TYPES}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={true}
           fitView
           fitViewOptions={{ padding: 0.12 }}
-          minZoom={0.2}
+          minZoom={0.15}
           maxZoom={2}
           proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#374151" />
           <Controls />
           <MiniMap
-            nodeColor={(n) => theme((n.data as Component).category).minimap}
+            nodeColor={(n) => getTheme((n.data as Component).category).minimap}
             maskColor="rgba(0,0,0,0.6)"
             style={{ background: '#111827', border: '1px solid #374151' }}
           />
