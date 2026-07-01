@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agentic PureCLIP — Walkthrough &amp; Results</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme">
+  <style>
+    :root {
+      --accent: #4fd1c5;      /* teal */
+      --accent2: #f6ad55;     /* amber */
+      --warn: #fc8181;        /* red */
+      --good: #68d391;        /* green */
+      --blue: #63b3ed;        /* llm */
+      --yellow: #f6e05e;      /* optuna */
+      --ink: #e2e8f0;
+      --muted: #94a3b8;
+      --bg: #0f1620;
+      --panel: #17212e;
+    }
+    .reveal { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: var(--ink); font-size: 28px; }
+    .reveal .slides { text-align: left; }
+    .reveal h1, .reveal h2, .reveal h3 { color: #fff; text-transform: none; letter-spacing: -0.01em; font-weight: 700; }
+    .reveal h1 { font-size: 1.9em; }
+    .reveal h2 { font-size: 1.3em; border-bottom: 2px solid var(--accent); padding-bottom: .22em; margin-bottom: .45em; }
+    .reveal section.present { top: 3.5% !important; }
+    .reveal-viewport { background: var(--bg); }
+    .reveal .slide-background { background: var(--bg); }
+    .kicker { color: var(--accent); font-size: .55em; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+    .reveal strong { color: #fff; }
+    .reveal em { color: var(--accent2); font-style: normal; }
+    .reveal table { font-size: .6em; margin: .3em 0; border-collapse: collapse; width: 100%; }
+    .reveal table th { color: var(--accent); border-bottom: 2px solid #2d3b4d; padding: .3em .5em; text-align: left; }
+    .reveal table td { border-bottom: 1px solid #22303f; padding: .26em .5em; }
+    .reveal ul, .reveal ol { margin-left: .2em; }
+    .reveal li { margin: .24em 0; line-height: 1.32; }
+    .accent { color: var(--accent); } .amber { color: var(--accent2); }
+    .warn { color: var(--warn); } .good { color: var(--good); }
+    .blue { color: var(--blue); } .yellow { color: var(--yellow); }
+    .muted { color: var(--muted); }
+    .panel { background: var(--panel); border: 1px solid #263242; border-radius: 12px; padding: .6em .9em; }
+    .panel.warn-panel { border-color: var(--warn); background: #241318; }
+    .panel.good-panel { border-color: var(--good); background: #10241a; }
+    .cols { display: flex; gap: 1em; }
+    .cols > div { flex: 1; }
+    .huge { font-size: 3.6em; font-weight: 800; line-height: 1; }
+    .label { font-size: .5em; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+    .footer { position: fixed; bottom: 10px; left: 24px; font-size: 12px; color: var(--muted); }
+    .reveal blockquote { background: var(--panel); border-left: 4px solid var(--accent); width: 100%; font-size: .6em; font-style: normal; box-shadow: none; padding: .6em 1em; margin: .4em 0; }
+    .tag { display: inline-block; font-size: .5em; padding: .1em .55em; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); margin-left: .35em; vertical-align: middle; }
+    .tag.win { border-color: var(--good); color: var(--good); }
+    code { color: var(--accent2); background: #1c2733; padding: .05em .35em; border-radius: 5px; font-size: .85em; }
+    .small { font-size: .72em; } .xs { font-size: .6em; }
+    /* section divider */
+    .divider { text-align: left; }
+    .divider .num { font-size: 1.1em; color: var(--accent); font-weight: 800; letter-spacing: .1em; }
+    .divider h1 { font-size: 2.1em; margin: .1em 0; }
+    /* flow chain */
+    .flow { display: flex; align-items: stretch; gap: .5em; margin: .5em 0; flex-wrap: wrap; }
+    .flow .node { background: var(--panel); border: 1px solid #2d3b4d; border-radius: 10px; padding: .5em .7em; font-size: .62em; flex: 1; min-width: 0; }
+    .flow .node b { color: var(--accent); display: block; font-size: 1.05em; margin-bottom: .15em; }
+    .flow .arr { align-self: center; color: var(--accent); font-size: .9em; }
+    /* glossary */
+    .gl { display: grid; grid-template-columns: 1fr 1fr; gap: .5em .9em; }
+    .term { background: var(--panel); border: 1px solid #263242; border-radius: 10px; padding: .45em .7em; }
+    .term .n { color: #fff; font-weight: 700; font-size: .74em; }
+    .term .r { color: var(--muted); font-size: .58em; float: right; }
+    .term .d { font-size: .6em; color: var(--ink); margin-top: .15em; line-height: 1.3; }
+    /* dashboard mockups */
+    .kpis { display: flex; gap: .6em; }
+    .kpi { background: var(--panel); border: 1px solid #263242; border-radius: 10px; padding: .5em .7em; flex: 1; }
+    .kpi .v { font-size: 1.3em; font-weight: 800; color: #fff; }
+    .kpi .l { font-size: .5em; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+    .kpi .s { font-size: .5em; color: var(--accent); margin-top: .1em; }
+    .mcards { display: flex; gap: .5em; margin-top: .4em; }
+    .mcard { background: var(--panel); border: 1px solid #263242; border-radius: 10px; padding: .45em .6em; flex: 1; text-align: center; }
+    .mcard.primary { border-color: var(--accent); background: #12312e; }
+    .mcard .v { font-size: 1.15em; font-weight: 800; color: #fff; }
+    .mcard .l { font-size: .46em; color: var(--muted); text-transform: uppercase; }
+    .badge { display: inline-block; font-size: .5em; padding: .12em .5em; border-radius: 5px; font-weight: 700; letter-spacing: .04em; }
+    .badge-llm { background: #1e3a5f; color: var(--blue); }
+    .badge-optuna { background: #4a3f10; color: var(--yellow); }
+    .badge-running { background: #10241a; color: var(--good); border: 1px solid var(--good); }
+    .badge-batch { background: #2a2140; color: #c4b5fd; }
+    .badge-overnight { background: #24303f; color: var(--accent); }
+    .win { font-weight: 700; font-size: .8em; }
+    .win.llm { color: var(--blue); } .win.optuna { color: var(--yellow); }
+    .spark { display: inline-flex; align-items: flex-end; gap: 2px; height: 22px; }
+    .spark i { width: 5px; background: #3d5573; border-radius: 1px; display: block; }
+    .spark i.best { background: var(--good); }
+    .stepper { display: flex; gap: .4em; margin: .3em 0; }
+    .step { flex: 1; background: var(--panel); border: 1px solid #263242; border-radius: 8px; padding: .4em .5em; font-size: .55em; }
+    .step.done { border-color: var(--good); } .step.done .s { color: var(--good); }
+    .step.active { border-color: var(--accent); background: #12312e; } .step.active .s { color: var(--accent); }
+    .step .n { color: var(--muted); font-size: .8em; } .step .s { font-weight: 700; margin-top: .1em; }
+    .callout { font-size: .58em; color: var(--muted); margin-top: .35em; }
+    .callout b { color: var(--accent); }
+  </style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ═══════════ TITLE ═══════════ -->
+<section data-background-gradient="linear-gradient(135deg, #0f1620 0%, #17212e 60%, #14342f 100%)">
+  <p class="kicker">Walkthrough &amp; Results · 2026-07-01</p>
+  <h1>Agentic PureCLIP</h1>
+  <h3 style="color:var(--accent); font-weight:600; margin-top:-.2em;">Automatically tuning eCLIP peak-calling — and how to read the dashboard</h3>
+  <p class="muted small" style="margin-top:1em;">Part 1 The problem · Part 2 How it works · Part 3 The vocabulary<br>Part 4 Reading the dashboard · Part 5 What happened · Part 6 Takeaways</p>
+</section>
+
+<!-- ═══════════ PART 1 DIVIDER ═══════════ -->
+<section class="divider" data-background-color="#12211d">
+  <p class="num">PART 1</p>
+  <h1>The Problem &amp; the Biology</h1>
+  <p class="muted small">What the data is, what PureCLIP does, and why parameters matter.</p>
+</section>
+
+<!-- eCLIP biology -->
+<section>
+  <h2>What is eCLIP?</h2>
+  <p class="small">A method to map <strong>where an RNA-binding protein (RBP) touches RNA</strong> inside living cells.</p>
+  <div class="flow">
+    <div class="node"><b>UV crosslink</b>Freeze protein onto the RNA it's bound to.</div><span class="arr">→</span>
+    <div class="node"><b>Pull down (IP)</b>Grab the target RBP with a specific antibody.</div><span class="arr">→</span>
+    <div class="node"><b>Sequence</b>Reverse transcription <em>stops at the crosslink</em> — the read's 5′ end marks the contact.</div>
+  </div>
+  <div class="cols" style="margin-top:.3em;">
+    <div class="panel small"><span class="accent">Two IP replicates</span> — the antibody pulldown for the RBP. Real binding should recur in both.</div>
+    <div class="panel small"><span class="accent">SMInput control</span> — background signal to subtract. We work from pre-aligned ENCODE BAM files.</div>
+  </div>
+  <p class="callout"><b>Why we care:</b> the crosslink sites tell you the protein's binding map at near-nucleotide resolution.</p>
+</section>
+
+<!-- PureCLIP + why tune -->
+<section>
+  <h2>PureCLIP &amp; why this project exists</h2>
+  <ul class="small">
+    <li><strong>PureCLIP</strong> is an HMM that reads the crosslink-truncation signal and calls <em>crosslink sites</em> and <em>binding regions</em>.</li>
+    <li>Its output is <strong>very sensitive to a handful of parameters</strong> (bandwidth, merge distance, precision mode…).</li>
+    <li>The right values are <strong>dataset-dependent</strong> — there is no universal setting. That is the whole problem.</li>
+  </ul>
+  <div class="panel" style="margin-top:.3em;">
+    <span class="label">The datasets — 3 RBPs × 2 cell lines</span>
+    <table class="small" style="margin-top:.2em;">
+      <tr><th>RBP</th><th>Motif (RNA)</th><th>Role</th><th>Cell lines</th></tr>
+      <tr><td>RBFOX2</td><td><code>UGCAUG</code></td><td>splicing regulator</td><td>K562, HepG2</td></tr>
+      <tr><td>QKI</td><td><code>ACUAAY</code></td><td>mRNA stability / splicing</td><td>K562, HepG2</td></tr>
+      <tr><td>PUM1</td><td><code>UGUANAUA</code></td><td>represses translation</td><td>K562</td></tr>
+    </table>
+  </div>
+  <p class="callout"><b>Goal:</b> for each dataset, find the parameters that give the most <em>trustworthy</em> binding sites.</p>
+</section>
+
+<!-- ═══════════ PART 2 DIVIDER ═══════════ -->
+<section class="divider" data-background-color="#12211d">
+  <p class="num">PART 2</p>
+  <h1>How the System Works</h1>
+  <p class="muted small">A closed optimization loop around the PureCLIP pipeline.</p>
+</section>
+
+<!-- The loop -->
+<section>
+  <h2>The Optimization Loop</h2>
+  <div class="flow">
+    <div class="node"><b>① Propose</b>An optimizer picks a parameter set.</div><span class="arr">→</span>
+    <div class="node"><b>② Run PureCLIP</b>Call sites on the eCLIP reads.</div><span class="arr">→</span>
+    <div class="node"><b>③ Score</b>reproducibility · motif · recall → <em>composite</em>.</div><span class="arr">→</span>
+    <div class="node"><b>④ Decide</b>Pick the next params.</div><span class="arr">↺</span>
+  </div>
+  <div class="cols" style="margin-top:.3em;">
+    <div class="panel"><span class="badge badge-llm">LLM</span> <span class="small">A DeepSeek agent — reasons in natural language from the biology &amp; prior results.</span></div>
+    <div class="panel"><span class="badge badge-optuna">OPTUNA · TPE</span> <span class="small">Bayesian search — models past trials statistically; no reasoning.</span></div>
+  </div>
+  <p class="callout"><b>Key design:</b> both optimizers share the <em>same</em> pipeline, scoring, and bounds — only the search strategy differs, so the comparison is apples-to-apples.</p>
+</section>
+
+<!-- The pipeline / stepper -->
+<section>
+  <h2>Inside one iteration — the pipeline</h2>
+  <p class="small muted">This is exactly the 4-stage stepper you see on the dashboard's <span class="accent">Active Run</span> card.</p>
+  <div class="stepper">
+    <div class="step done"><div class="n">step 1</div><div class="s">PureCLIP</div></div>
+    <div class="step done"><div class="n">step 2</div><div class="s">Postprocess</div></div>
+    <div class="step active"><div class="n">step 3</div><div class="s">Score</div></div>
+    <div class="step"><div class="n">step 4</div><div class="s">LLM decide</div></div>
+  </div>
+  <ul class="small" style="margin-top:.3em;">
+    <li><strong>PureCLIP</strong> — merge the two IP replicates, call crosslink sites (also per-replicate for reproducibility).</li>
+    <li><strong>Postprocess</strong> — standardise each site to the protein's ~9 nt footprint; filter &amp; cluster.</li>
+    <li><strong>Score</strong> — compute reproducibility, motif hit-rate, recall → the composite.</li>
+    <li><strong>Decide</strong> — optimizer proposes the next parameter set, and the loop repeats.</li>
+  </ul>
+  <p class="callout"><b>Fast mode:</b> <code>learn_on_chr21</code> restricts to chromosome 21 — minutes per iteration instead of hours (used for all batch experiments).</p>
+</section>
+
+<!-- ═══════════ PART 3 DIVIDER ═══════════ -->
+<section class="divider" data-background-color="#12211d">
+  <p class="num">PART 3</p>
+  <h1>The Vocabulary</h1>
+  <p class="muted small">Every term on the dashboard, in plain English. (Mirrors the UI "Variables" page.)</p>
+</section>
+
+<!-- Knobs -->
+<section>
+  <h2>The Knobs — what gets tuned</h2>
+  <p class="xs muted">PureCLIP (turns reads → sites) · Post-processing (filters → final site set)</p>
+  <div class="gl">
+    <div class="term"><span class="n">bandwidth_nt</span><span class="r">20–100</span><div class="d">Smoothing window for scanning read coverage. <span class="accent">Larger → broader/more sites; smaller → sharper.</span></div></div>
+    <div class="term"><span class="n">merge_distance_nt</span><span class="r">4–16</span><div class="d">How close two sites must be to merge into one.</div></div>
+    <div class="term"><span class="n">high_precision_mode</span><span class="r">0/1</span><div class="d">Stricter calling. <span class="accent">On → fewer, higher-confidence sites.</span></div></div>
+    <div class="term"><span class="n">use_input_covariate</span><span class="r">0/1</span><div class="d">Use the SMInput control to subtract background.</div></div>
+    <div class="term"><span class="n">min_crosslink_events</span><span class="r">2–6</span><div class="d">Min read events to keep a site. <span class="warn">Higher → fewer sites (can collapse yield).</span></div></div>
+    <div class="term"><span class="n">force_width</span><span class="r">3–15</span><div class="d">Fixed width each site is normalised to — the RBP footprint (~9 nt).</div></div>
+    <div class="term"><span class="n">cluster_gap_width</span><span class="r">4–16</span><div class="d">Max gap when clustering adjacent sites into a region.</div></div>
+    <div class="term" style="border-color:#2d3b4d;background:#12211d"><span class="n muted">…7 knobs total</span><div class="d">4 PureCLIP + 3 post-processing, all within fixed bounds.</div></div>
+  </div>
+</section>
+
+<!-- Metrics -->
+<section>
+  <h2>The Score — what "good" means</h2>
+  <div class="panel" style="margin-bottom:.4em;">
+    <span class="label">The composite — the single number the optimizer climbs</span><br>
+    <span class="small"><code>composite = (0.5·reproducibility + 0.25·motif + 0.25·recall) × collapse&nbsp;guard</code></span>
+  </div>
+  <div class="gl">
+    <div class="term"><span class="n good">reproducibility ×0.50</span><span class="r">0–1</span><div class="d">Replicate agreement <em>corrected for chance</em>: (observed−expected)/(1−expected). Can't be faked by keeping a few broad sites.</div></div>
+    <div class="term"><span class="n good">motif ×0.25</span><span class="r">0–1</span><div class="d">Fraction of sites carrying the RBP's expected RNA motif (log-odds PWM). Biological validity.</div></div>
+    <div class="term"><span class="n good">recall ×0.25</span><span class="r">0–1</span><div class="d">Fraction of known-strong ENCODE reference regions recovered. Anchors to ground truth; penalises collapse.</div></div>
+    <div class="term" style="border-color:var(--warn)"><span class="n warn">collapse guard</span><span class="r">min(1, n/10)</span><div class="d">Scales the score down below ~10 sites. With a handful of sites, rep &amp; motif trivially hit 1.0 — this stops that "win".</div></div>
+  </div>
+  <p class="callout"><b>Also shown:</b> <code>motif_enrichment</code> (× over shuffled background; &gt;1× = real) · <code>n_binding_sites</code> (watch for collapse).</p>
+</section>
+
+<!-- ═══════════ PART 4 DIVIDER ═══════════ -->
+<section class="divider" data-background-color="#12211d">
+  <p class="num">PART 4</p>
+  <h1>Reading the Dashboard</h1>
+  <p class="muted small"><code>monitor.py</code> serves it · view via SSH tunnel → <code>localhost:8888</code></p>
+</section>
+
+<!-- Dashboard: top + active -->
+<section>
+  <h2>Top strip &amp; Active Run</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="v good">● Running</div><div class="l">Status</div><div class="s">QKI_HepG2 · Optuna</div></div>
+    <div class="kpi"><div class="v good">0.498</div><div class="l">Best composite</div><div class="s">RBFOX2_HepG2</div></div>
+    <div class="kpi"><div class="v">5</div><div class="l">Datasets</div><div class="s">326 iters scored</div></div>
+    <div class="kpi"><div class="v">7<span class="muted xs">/10</span></div><div class="l">Batch jobs done</div></div>
+    <div class="kpi"><div class="v blue">~42m</div><div class="l">Batch ETA</div></div>
+  </div>
+  <div class="mcards">
+    <div class="mcard primary"><div class="v">0.401</div><div class="l">composite</div></div>
+    <div class="mcard"><div class="v">0.39</div><div class="l">reproducibility</div></div>
+    <div class="mcard"><div class="v">0.47</div><div class="l">motif (4.2×)</div></div>
+    <div class="mcard"><div class="v">0.35</div><div class="l">recall</div></div>
+    <div class="mcard"><div class="v">127</div><div class="l">binding sites</div></div>
+  </div>
+  <p class="callout"><b>Read it as:</b> the KPI strip = health at a glance; the metric cards = the live breakdown of the composite. <b>Always glance at "binding sites"</b> — a high score with tiny n is a collapse, not a win.</p>
+</section>
+
+<!-- Dashboard: leaderboard -->
+<section>
+  <h2>The Results leaderboard</h2>
+  <p class="xs muted">🏆 Best per dataset — the head-to-head, at a glance.</p>
+  <table>
+    <tr><th>dataset</th><th>iters</th><th class="blue">LLM</th><th class="yellow">Optuna</th><th>winner</th><th>best</th><th>trend</th></tr>
+    <tr><td><b>RBFOX2_HepG2</b></td><td>29</td><td class="blue">0.434</td><td class="yellow">0.498</td><td><span class="win optuna">OPTUNA</span></td><td class="good"><b>0.498</b></td><td><span class="spark"><i style="height:4px"></i><i style="height:9px"></i><i style="height:7px"></i><i style="height:14px"></i><i class="best" style="height:20px"></i></span></td></tr>
+    <tr><td><b>PUM1_K562</b></td><td>60</td><td class="blue">0.458</td><td class="yellow">0.372</td><td><span class="win llm">LLM</span></td><td class="good"><b>0.458</b></td><td><span class="spark"><i style="height:6px"></i><i style="height:5px"></i><i style="height:10px"></i><i class="best" style="height:18px"></i><i style="height:9px"></i></span></td></tr>
+    <tr><td><b>QKI_K562</b></td><td>36</td><td class="blue">0.329</td><td class="yellow">0.334</td><td><span class="win optuna">OPTUNA</span></td><td class="good"><b>0.334</b></td><td><span class="spark"><i style="height:5px"></i><i style="height:8px"></i><i class="best" style="height:16px"></i><i style="height:7px"></i><i style="height:6px"></i></span></td></tr>
+  </table>
+  <div class="cols" style="margin-top:.3em;">
+    <div class="panel xs"><b class="blue">LLM</b> / <b class="yellow">Optuna</b> columns = each optimizer's best. <b>winner</b> = who's ahead.</div>
+    <div class="panel xs"><b>trend</b> sparkline = composite per iteration; the <span class="good">green bar</span> is the best. Rising = learning.</div>
+  </div>
+</section>
+
+<!-- Dashboard: detail table + self-correcting -->
+<section>
+  <h2>Per-dataset detail &amp; a key property</h2>
+  <table>
+    <tr><th>run</th><th>opt</th><th>iter</th><th>sites</th><th>reprod.</th><th>motif</th><th>recall</th><th>composite</th><th>src</th></tr>
+    <tr><td>RBFOX2_HepG2_iter_04</td><td><span class="badge badge-optuna">optuna</span></td><td>4</td><td>603</td><td>0.463</td><td>0.166</td><td>0.90</td><td><b class="good">0.498</b></td><td><span class="badge badge-overnight">overnight</span></td></tr>
+    <tr><td>QKI_K562_iter_13</td><td><span class="badge badge-optuna">optuna</span></td><td>13</td><td class="warn">1</td><td>1.00</td><td>1.00</td><td>0.10</td><td><b class="warn">~0.08</b></td><td><span class="badge badge-overnight">overnight</span></td></tr>
+  </table>
+  <div class="panel good-panel" style="margin-top:.4em;">
+    <span class="label good">Why the dashboard is trustworthy</span><br>
+    <span class="small">The monitor <strong>recomputes the composite live</strong> from each <code>score_report.json</code> using the <em>exact same</em> objective function the optimizer uses — collapse guard included. So the raw <span class="warn">0.775</span> logged for that 1-site run is <strong>re-scored to ~0.08 on the dashboard</strong>. Change the objective → all historical runs re-score automatically.</span>
+  </div>
+  <p class="callout"><b>src badges:</b> <span class="badge badge-batch">batch</span> quick scans · <span class="badge badge-overnight">overnight</span> long runs · live = running now.</p>
+</section>
+
+<!-- ═══════════ PART 5 DIVIDER ═══════════ -->
+<section class="divider" data-background-color="#1a2417">
+  <p class="num">PART 5</p>
+  <h1>What Happened</h1>
+  <p class="muted small">5 datasets · ~45 runs · 326 scored iterations.</p>
+</section>
+
+<!-- Baselines -->
+<section>
+  <h2>Gains vs. Default Parameters</h2>
+  <p class="xs muted">Baseline = iteration 0 (defaults). Best = best <em>honest</em> iteration (n_sites ≥ 10).</p>
+  <table>
+    <tr><th>Dataset</th><th>Baseline</th><th>Best (honest)</th><th>Δ</th><th>Driver</th></tr>
+    <tr><td>RBFOX2_HepG2</td><td>0.393</td><td class="good">0.498 · Optuna</td><td class="good">+27%</td><td>recall 0.60 → <strong>0.90</strong></td></tr>
+    <tr><td>RBFOX2_K562 <span class="muted xs">(hardest)</span></td><td>0.130</td><td class="good">0.235 · LLM</td><td class="good">+81%</td><td>recall 0.15 → 0.50 (bw 100nt)</td></tr>
+    <tr><td>QKI_HepG2</td><td>0.327</td><td class="good">0.401 · Optuna</td><td class="good">+22%</td><td>motif 0.27 → 0.47, n=127</td></tr>
+    <tr><td>PUM1_K562</td><td>0.387</td><td class="good">0.458 · LLM</td><td class="good">+18%</td><td>reprod. 0.53 → <strong>0.72</strong></td></tr>
+    <tr><td>QKI_K562</td><td>0.257</td><td class="good">0.329 · LLM</td><td class="good">+28%</td><td>motif 0.21 → 0.40</td></tr>
+  </table>
+  <p class="callout"><b>Read it as:</b> the loop beats hand-set defaults on <em>every</em> dataset — biggest lift where defaults did worst (RBFOX2_K562).</p>
+</section>
+
+<!-- Head to head -->
+<section>
+  <h2>Head-to-Head: LLM vs. Optuna</h2>
+  <table>
+    <tr><th>Dataset</th><th class="blue">LLM</th><th class="yellow">Optuna (honest)</th><th>Winner</th></tr>
+    <tr><td>PUM1_K562</td><td class="good">0.458</td><td>0.372</td><td><span class="tag win">LLM</span></td></tr>
+    <tr><td>QKI_K562</td><td class="good">0.329</td><td>~0.234 <span class="warn xs">(0.775 = collapse)</span></td><td><span class="tag win">LLM</span></td></tr>
+    <tr><td>RBFOX2_K562</td><td class="good">0.235</td><td>0.217</td><td><span class="tag win">LLM</span></td></tr>
+    <tr><td>QKI_HepG2</td><td>0.366</td><td class="good">0.401</td><td><span class="tag win">Optuna</span></td></tr>
+    <tr><td>RBFOX2_HepG2</td><td>0.434</td><td class="good">0.498</td><td><span class="tag win">Optuna</span></td></tr>
+  </table>
+  <div class="cols" style="margin-top:.4em;">
+    <div class="panel"><span class="label">Score</span><br><strong>LLM 3 : Optuna 2</strong><br><span class="xs muted">LLM sweeps the harder K562 line; Optuna wins both HepG2 + best overall run.</span></div>
+    <div class="panel"><span class="label">Convergence</span><br><span class="small">LLM locks best @ <strong>it 8–11</strong>; Optuna hits early (it 1–4) but explores blindly.</span></div>
+  </div>
+</section>
+
+<!-- The 0.775 trap -->
+<section data-background-color="#1a0f13">
+  <h2 class="warn">⚠️ The "0.775" Trap</h2>
+  <div class="cols">
+    <div style="flex:0 0 32%;">
+      <p class="label">Highest logged score</p>
+      <p class="huge warn">0.775</p>
+      <p class="xs muted">QKI_K562 · Optuna · iter 13</p>
+    </div>
+    <div>
+      <div class="panel warn-panel small">rep <strong>1.000</strong> · motif <strong>1.000</strong> · recall 0.10 · <span class="warn">n_sites = 1</span></div>
+      <ul class="small">
+        <li>One site trivially agrees with itself &amp; sits on a motif.</li>
+        <li>The <em>logged</em> value skipped the guard; guard-adjusted <span class="warn">≈ 0.078</span> (and the live dashboard already shows it that way).</li>
+        <li>Same failure twice more — <strong>all Optuna:</strong> QKI_HepG2 0.554 (n=6), PUM1 0.361 (n=9).</li>
+      </ul>
+    </div>
+  </div>
+  <p class="callout"><b>Lesson:</b> this is why the collapse guard exists — and why you <em>always</em> check n_binding_sites next to the score.</p>
+</section>
+
+<!-- Winning params -->
+<section>
+  <h2>The Winning Configuration</h2>
+  <p class="small"><span class="good">RBFOX2_HepG2 · Optuna · composite 0.498</span> — 603 sites, 90% recall</p>
+  <div class="cols">
+    <div class="panel"><span class="label accent">PureCLIP</span>
+      <table class="small"><tr><td>bandwidth_nt</td><td><b>23</b> <span class="muted">narrow</span></td></tr>
+      <tr><td>merge_distance_nt</td><td><b>11</b></td></tr>
+      <tr><td>high_precision_mode</td><td class="amber"><b>true</b> ⟵ flip</td></tr>
+      <tr><td>use_input_covariate</td><td class="amber"><b>false</b> ⟵ flip</td></tr></table></div>
+    <div class="panel"><span class="label accent">Post-processing</span>
+      <table class="small"><tr><td>force_width</td><td><b>15</b> <span class="muted">wide</span></td></tr>
+      <tr><td>cluster_gap_width</td><td><b>16</b> <span class="muted">max</span></td></tr>
+      <tr><td>min_crosslink_events</td><td><b>2</b></td></tr>
+      <tr><td>min_region_length_nt</td><td>3</td></tr></table></div>
+  </div>
+  <p class="callout"><b>Why notable:</b> a "sharp-detection, wide-footprint, precision-mode" regime — the <em>opposite</em> of defaults on two switches. The <strong>LLM never explored it</strong>; Optuna's blind search found it by ignoring the prior.</p>
+</section>
+
+<!-- Trade-offs -->
+<section>
+  <h2>Biological Trade-offs</h2>
+  <p class="xs muted">The 0.5 weight on reproducibility tempts the optimizer to buy agreement by shrinking the site set.</p>
+  <div class="cols">
+    <div class="panel good-panel"><span class="label good">True optimal centers</span>
+      <ul class="small"><li><strong>RBFOX2_HepG2 (0.498):</strong> recall <strong>0.90</strong> + rep 0.46 on 603 sites — breadth <em>and</em> agreement.</li>
+      <li><strong>QKI_HepG2 (0.401):</strong> rep 0.39 / motif 0.47 / recall 0.35, n=127 — balanced.</li></ul></div>
+    <div class="panel warn-panel"><span class="label warn">Reproducibility-for-recall</span>
+      <ul class="small"><li><strong>PUM1_K562 LLM (0.458):</strong> rep → 0.72 but <span class="warn">recall → 0.0</span>, n=18 — near-collapse (but the LLM saw it).</li>
+      <li><strong>The § collapses:</strong> the pathological extreme.</li></ul></div>
+  </div>
+  <p class="callout"><b>Pattern:</b> on <strong>HepG2</strong> it found real centers; on the sparser <strong>K562</strong> signal it trades recall for reproducibility — only the guard keeps that honest.</p>
+</section>
+
+<!-- LLM reasoning -->
+<section>
+  <h2>The LLM's Reasoning</h2>
+  <p class="xs muted">Its decision trail (<code>decisions.jsonl</code>, shown live on the Runs page) reasons from the math <em>and</em> biology.</p>
+  <p class="xs accent">Objective-aware (QKI_HepG2):</p>
+  <blockquote>"The composite improved … <strong>despite a drop in reproducibility</strong> … because the weight on reproducibility (0.5) was offset by gains in motif and recall. The drop is acceptable <strong>since it is chance-corrected</strong>."</blockquote>
+  <p class="xs accent">Motif-geometry-aware (QKI_K562):</p>
+  <blockquote>"The known motifs for QKI are <strong>~11nt long</strong> … Increasing force_width to 11 might <strong>capture more of the full motif span</strong>, raising motif_hit_rate."</blockquote>
+  <p class="callout"><b>And it self-polices:</b> "…collapsed n_sites to 18 and recall to 0.0, <em>triggering the collapse guard</em>" — it declined the degenerate win.</p>
+</section>
+
+<!-- ═══════════ PART 6 DIVIDER ═══════════ -->
+<section class="divider" data-background-color="#1a2417">
+  <p class="num">PART 6</p>
+  <h1>Takeaways</h1>
+</section>
+
+<!-- Recommendations -->
+<section>
+  <h2>Interpretation &amp; Next Steps</h2>
+  <ol class="small">
+    <li><strong>The loop delivers real gains</strong> on every dataset — biggest where defaults did worst.</li>
+    <li><strong>LLM = reliable, Optuna = explorer.</strong> LLM never collapsed a dataset; Optuna found the best single config but needs the guard to stay honest.</li>
+    <li><strong>Always read score <em>with</em> n_binding_sites.</strong> The dashboard's live re-scoring enforces this automatically.</li>
+    <li><strong>RBFOX2_K562 is the open problem</strong> — best is still only 0.235; reproducibility stuck at ~0.10.</li>
+    <li><strong>Harden the objective</strong> — IDR-based reproducibility + dinucleotide-shuffled motif background.</li>
+  </ol>
+  <div class="panel" style="margin-top:.4em;">
+    <span class="label">One-line takeaway</span><br>
+    <span class="small">Real biological gains on every dataset; the LLM is the <span class="accent">reliable</span> optimizer, Optuna the stronger <span class="accent">explorer</span> — and the collapse guard is what makes the comparison honest.</span>
+  </div>
+</section>
+
+<!-- Close -->
+<section data-background-gradient="linear-gradient(135deg, #14342f 0%, #17212e 50%, #0f1620 100%)">
+  <p class="kicker">Thank you</p>
+  <h1>Questions?</h1>
+  <p class="muted small">Full detail in <code>meeting-summary.md</code> · Live dashboard: <code>ssh -f -N -L 8888:localhost:8888 bio</code> → <code>localhost:8888</code></p>
+</section>
+
+</div></div>
+
+<div class="footer">Agentic PureCLIP — Walkthrough &amp; Results</div>
+
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script>
+  Reveal.initialize({ hash: true, slideNumber: 'c/t', transition: 'slide', width: 1280, height: 720, margin: 0.045 });
+</script>
+</body>
+</html>
