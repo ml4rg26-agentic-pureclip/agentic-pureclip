@@ -12,6 +12,9 @@ dependencies:
   - ucsc-bedgraphtobigwig
   - meme
   - pip
+  - weasyprint>=61.0
+  - matplotlib>=3.8.0
+  - jinja2>=3.1.0
   - pip:
       - langgraph>=0.2.0
       - langchain-google-genai>=2.0.0

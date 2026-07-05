@@ -1,5 +1,4 @@
 # Agentic PureCLIP
-some change
 
 An LLM-driven parameter optimization framework for eCLIP data analysis, tuning the [PureCLIP](https://github.com/skrakau/PureCLIP) algorithm.
 
@@ -25,10 +24,13 @@ Requires `conda` and a Google Gemini API key.
 # 1. Create environment
 conda env create -f environment.yml
 conda activate agentic-pureclip
+# Note: If you already have the environment and just pulled new updates, run:
+# conda env update -f environment.yml --prune
 
 # 2. Configure API keys
 cp .env.example .env
-# Edit .env to add your GEMINI_API_KEY
+# Edit .env to add your GOOGLE_API_KEY (for Google Gemini API)
+# Optionally, configure LANGSMITH_API_KEY and LANGSMITH_PROJECT for tracing
 ```
 
 ### Running the Pipeline
@@ -45,6 +47,11 @@ cp .env.example .env
    ```
 
 The agent writes every iteration to its own configured output directory under `results/runs/`. The optimal parameters are saved to `config/best_config.yaml`.
+
+To generate a PDF summary report from the run's history:
+```bash
+python agent/report.py config/run_config.yaml results/runs/report.pdf
+```
 
 ### Reproducible Direct Runs
 
@@ -70,10 +77,24 @@ python scripts/write_dataset_config.py RBFOX2_K562 --out config/datasets/RBFOX2_
 
 ## Architecture
 
-- [`agent/`](agent/README.md): LangGraph state machine, LLM decision-making, and iteration history.
+- [`agent/`](agent/README.md): LangGraph state machine, LLM decision-making, and iteration history. Includes `graph.py` (production) and `graph_mock.py` (offline testing).
 - [`pipeline/`](pipeline/README.md): Config validation, dataset registry, and reproducible execution helpers.
 - [`workflow/`](workflow/README.md): Snakemake pipeline and `postprocess.py` for biological footprint standardization.
 - [`scorers/`](scorers/README.md): Evaluation metrics (`replicate_agreement`, `motif_hit_rate`).
 - [`config/`](config/README.md): Datasets configuration and biological priors.
 - [`scripts/`](scripts/README.md): Data preparation utilities.
 - [`tests/`](tests/README.md): Automated test suite for the Agent and Workflow.
+
+## Testing & Development
+
+For quick testing without running the full pipeline:
+```bash
+# Run the mock agent (simulates pipeline with fake scores, requires Gemini API)
+env CONFIG_PATH=config/run_config.yaml MAX_ITER=3 python -m agent.graph_mock
+
+# Run the mock agent fully offline (no API key needed)
+env USE_GEMINI=0 CONFIG_PATH=config/run_config.yaml MAX_ITER=3 python -m agent.graph_mock
+```
+
+The mock agent produces identical state transitions and decision-making as the production agent, enabling rapid prototyping and testing without bioinformatics dependencies.
+
