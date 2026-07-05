@@ -19,9 +19,14 @@ def build_decision_prompt(state: dict[str, Any], report: dict[str, Any]) -> str:
         }
         for h in state["history"]
     ]
-    return f"""You are optimising PureCLIP parameters for eCLIP data.
+    return f"""You are analysing eCLIP data for the RNA-binding protein described in
+PRIOR KNOWLEDGE below. You are tuning a two-stage peak-calling pipeline to recover
+this protein's true binding sites. Use what is known about this protein's binding
+biology to guide every parameter decision.
 
-Your goal is to MAXIMISE {state['objective_metric']} without collapsing the number of binding sites.
+Your goal is to MAXIMISE {state['objective_metric']} without collapsing the number
+of binding sites, while keeping the recovered sites biologically plausible.
+
 THE PIPELINE HAS TWO STAGES, and the parameters you control belong to each:
 
   Stage 1 - PureCLIP (peak calling):
@@ -45,7 +50,7 @@ THE PIPELINE HAS TWO STAGES, and the parameters you control belong to each:
         (the geometric centre between start and end, NOT a signal summit)
         and force it to this fixed width.
 
-PRIOR KNOWLEDGE:
+PRIOR KNOWLEDGE (use this to reason about the biology, not just the statistics):
 {json.dumps(priors, indent=2)}
 
 SEARCH BOUNDS (hard limits, never exceed these):
@@ -61,21 +66,26 @@ FULL HISTORY OF PREVIOUS ATTEMPTS:
 {json.dumps(history, indent=2)}
 
 DECISION RULES:
-1. Use observed score trends, not a fixed assumption that relaxing or
-   tightening always helps.
-2. You may change multiple parameters at once when you have a reason to expect
+1. Ground each parameter choice in this protein's binding biology (motif length,
+   point-like vs broad binding) AND in the observed score trends. Do not rely on
+   a fixed assumption that relaxing or tightening always helps.
+2. Consider motif_hit_rate and n_binding_sites alongside the primary objective,
+   not the objective in isolation.
+3. You may change multiple parameters at once when you have a reason to expect
    them to interact, but keep the number of simultaneous changes small (at most
    2-3). For every parameter you change, state in your reasoning what you expect
-   it to do and why. Changing many parameters blindly makes the result
-   impossible to attribute to any single cause.
-3. Do not repeat any previous parameter set.
-4. Stay inside the search bounds exactly.
-5. Only change parameters listed in SEARCH BOUNDS.
+   it to do and why, referencing the biology where relevant. Changing many
+   parameters blindly makes the result impossible to attribute to any single cause.
+4. Do not repeat any previous parameter set, and avoid trivial one-unit changes
+   that do not meaningfully explore the space.
+5. Stay inside the search bounds exactly.
+6. Only change parameters listed in SEARCH BOUNDS.
 
 Respond ONLY with JSON:
-{{"reasoning": "state the trend you observed and why you chose this direction",
+{{"reasoning": "reflect on this RBP's role and binding_preference, state the trend
+  you observed, how the biology and known target genes inform your choice, and why
+  you chose this direction",
   "changes": {{"pureclip": {{...}}, "postprocessing": {{...}}}}}}"""
-
 
 def parse_decision_response(text: str) -> dict[str, Any]:
     cleaned = text.strip()
