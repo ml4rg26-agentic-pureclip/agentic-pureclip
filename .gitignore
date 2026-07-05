@@ -29,6 +29,8 @@ __pycache__/
 # ==============================
 *.log
 logs/
+*.pdf
+*.html
 
 # ==============================
 # Data, References & Results
