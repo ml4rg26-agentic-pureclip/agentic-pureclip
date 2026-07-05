@@ -1,0 +1,242 @@
+\section{Introduction}
+\label{introduction}
+
+% ── 1. Biological background (~0.5 page) ───────────────────────────────
+%   • RBPs regulate RNA post-transcriptionally (splicing, stability,
+%     translation). Identifying their binding sites genome-wide is a
+%     central goal of RNA biology.
+%   • eCLIP: UV crosslinks RBP to RNA → antibody pulldown → sequencing.
+%     Reverse transcriptase truncates at the crosslink site; the 5′ read
+%     end marks the protein–RNA contact at near-nucleotide resolution.
+%   • Experimental design: 2 IP replicates + SMInput (size-matched input)
+%     control. All BAMs are pre-aligned and deduplicated (ENCODE pipeline).
+%   • Three RBPs studied across two cell lines (K562 / HepG2):
+%       RBFOX2 → UGCAUG (splicing), QKI → ACUAAY (mRNA stability),
+%       PUM1 → UGUANAUA (translation repressor).
+
+% ── 2. The peak-calling problem and motivation ─────────────────────────
+%   • PureCLIP (HMM-based) converts read pileups into called binding sites,
+%     but its output depends heavily on a small set of numeric parameters
+%     (bandwidth, merge distance, precision mode, etc.).
+%   • Optimal values are dataset-dependent (different RBPs, cell lines,
+%     antibody efficiencies). Manual tuning is slow (~hours/set on full
+%     data) and subjective — motivating automated optimization.
+
+% ── 3. This project ────────────────────────────────────────────────────
+%   • Goal: automatically identify the best PureCLIP + post-processing
+%     parameters for each eCLIP dataset using a composite quality score
+%     (reproducibility, motif enrichment, benchmark recall).
+%   • Two interchangeable optimizers sharing one evaluation pipeline:
+%       (a) LLM agent (DeepSeek) — proposes parameter changes from
+%           per-iteration score deltas and biological priors.
+%       (b) Optuna/TPE — Bayesian optimizer, no API cost.
+%   • Research question: on a 7-parameter biological search space, does
+%     LLM reasoning + biological priors outperform systematic Bayesian
+%     search?
+
+% ── 4. Report outline (2–3 sentences) ──────────────────────────────────
+%   Theory (§2) covers PureCLIP, scoring metrics, and the objective.
+%   Methods (§3) describes datasets, pipeline, and optimizer designs.
+%   Results (§4), Discussion (§5), and Conclusion (§6) follow.
+\section{Theory}
+\label{theory}
+
+% ── 1. PureCLIP ────────────────────────────────────────────────────────
+%   • HMM that models read 5′-start density along the genome; states:
+%     "crosslinked" vs. "background". Uses a KDE over read-start positions.
+%     Optionally incorporates the SMInput BAM as a background covariate.
+%   • Outputs two BED files: crosslink sites (single-nt positions) and
+%     binding regions (nearby sites merged within merge_distance_nt).
+%     The binding regions file is the primary output for downstream scoring.
+%   • Four tunable parameters:
+%       bandwidth_nt      [20–100]  KDE bandwidth (sharpness of signal)
+%       merge_distance_nt [4–16]   Max gap to merge crosslink sites
+%       high_precision_mode {0,1}  Conservative calling
+%       use_input_covariate {0,1}  Use SMInput as HMM covariate
+
+% ── 2. Post-processing ─────────────────────────────────────────────────
+%   After PureCLIP, three steps produce the final binding_sites.bed:
+%   (1) Filter by min_crosslink_events — drop low-support regions.
+%   (2) Force a standardized footprint width (force_width nt, centred on
+%       the binding region midpoint). Ensures sites are comparable across
+%       parameter sets; expected RBP footprint ≈ 9 nt.
+%   (3) Optional gap-based clustering (cluster_gap_width).
+%   Three additional tunable parameters: min_crosslink_events [2–6],
+%   force_width [3–15], cluster_gap_width [4–16].
+
+% ── 3. Scoring dimensions ──────────────────────────────────────────────
+%   3a. Reproducibility (chance-corrected replicate agreement)
+%       PureCLIP is run independently on each IP replicate. Reproducibility
+%       = (observed overlap fraction − expected) / (1 − expected), where
+%       expected is estimated by shuffling sites on the same chromosome (3
+%       repeats). Chance-correction removes bias from few, broad intervals.
+%
+%   3b. Motif hit rate (biological validity)
+%       Sequences flanking each binding site (±15 nt, strand-aware) are
+%       scanned with log-odds PWMs (mCrossBase, ATtRACT, CISBP-RNA;
+%       IUPAC fallback). Hit rate = fraction of sites with ≥1 PWM hit.
+%       Enrichment = foreground rate / mononucleotide-shuffled background.
+%       The most-enriched motif is reported (prevents an uninformative
+%       motif from dominating).
+%
+%   3c. Benchmark recall (recovery of known sites)
+%       Fraction of ENCODE "top regions" (curated reference) overlapped by
+%       our called sites. Under chr21 mode the reference is restricted to
+%       chr21 to keep recall meaningful (~4.5% of genome-wide regions).
+
+% ── 4. Composite objective ─────────────────────────────────────────────
+%   composite = (0.5 · repro + 0.25 · motif + 0.25 · recall)
+%               × min(1, n_binding_sites / 10)
+%
+%   All terms ∈ [0,1]; weights renormalised if a term is absent.
+%   Reproducibility carries the highest weight (genuine binding signal).
+%   The collapse guard (× min(1, n/10)) ramps scores to ~0 below 10 sites,
+%   preventing an optimizer from maximising composite with 1–2 "perfect"
+%   sites (observed: Optuna collapsed QKI to 1 site, composite 0.78,
+%   before the guard was introduced).
+
+% ── 5. Optimization approaches (overview) ──────────────────────────────
+%   Both optimizers call the same evaluate_config() function and optimise
+%   the same composite — only the proposal strategy differs.
+%   • LLM agent (DeepSeek): reads a per-iteration progress table with score
+%     deltas and biological priors; proposes one parameter change per step.
+%   • Optuna / TPE: Tree-structured Parzen Estimator models the objective
+%     surface from prior trials and samples promising regions.
+%   Full implementation details are in §3.
+\section{Material \& Methods}
+\label{method}
+
+% ── 1. Datasets ────────────────────────────────────────────────────────
+%   TABLE — 5 datasets (one row each):
+%   Dataset       | RBP    | Cell | ENCODE accessions (IP rep1, IP rep2, SMInput)
+%   RBFOX2_K562   | RBFOX2 | K562 | ENCFF537RYR, ENCFF296GDR, ENCFF212IIR
+%   RBFOX2_HepG2  | RBFOX2 | HepG2| ENCFF239CML, ENCFF170YQV, ENCFF515BTB
+%   QKI_K562      | QKI    | K562 | ENCFF698BKX, ENCFF012WMS, ENCFF070RME
+%   QKI_HepG2     | QKI    | HepG2| ENCFF567ADV, ENCFF862YVK, ENCFF015GLL
+%   PUM1_K562     | PUM1   | K562 | ENCFF064COB, ENCFF583QFB, ENCFF222HEX
+%
+%   All BAMs: pre-aligned to GRCh38, deduplicated (ENCODE pipeline).
+%   chr21 fast mode used throughout: PureCLIP restricted to chr21
+%   (~minutes/trial vs. hours for full genome).
+
+% ── 2. Pipeline (Snakemake, 5 rules per iteration) ─────────────────────
+%   (1) merge_ip — samtools merge of the two IP replicates.
+%   (2) pureclip — pureclip2 on merged BAM → crosslink_sites.bed +
+%       binding_regions.bed.
+%   (3) pureclip_per_replicate — same call on each replicate independently
+%       (needed for reproducibility scoring).
+%   (4) postprocess — filter + footprint-standardise → binding_sites.bed.
+%   (5) score — all scorers → score_report.json.
+%   Add a simple pipeline diagram or flowchart figure here.
+
+% ── 3. LLM agent ───────────────────────────────────────────────────────
+%   Model: DeepSeek (deepseek-chat), temperature 0.2.
+%   Each iteration the agent receives: objective weights, biological priors
+%   (protein identity, expected footprint ~9 nt, known motif), search
+%   bounds, current parameters, latest score_report.json, and a per-
+%   iteration progress table with score deltas.
+%   It proposes one parameter change per iteration with free-text reasoning.
+%   Validation: JSON response is parsed, checked against bounds and prior
+%   trials; up to 3 retries with the rejection reason fed back into prompt.
+%   Stopping: max_iterations (10–12) or patience = 10 steps without
+%   improvement > 0.01.
+
+% ── 4. Optuna / TPE ────────────────────────────────────────────────────
+%   Sampler: TPESampler (seed 42), maximising composite_objective.
+%   Budget: 12–15 trials per dataset.
+%   Calls the same evaluate_config() entry point as the LLM agent;
+%   results are recorded in the same decisions.jsonl format.
+
+% ── 5. Experimental setup ──────────────────────────────────────────────
+%   Main experiment: 5 datasets × 2 optimizers = 10 runs, executed via
+%   overnight_batch.py (failure-tolerant, per-job timeout, no batch abort
+%   on single failure). Results stored under results/overnight/.
+\section{Results}
+\label{results}
+
+% ── 1. Head-to-head summary ────────────────────────────────────────────
+%   TABLE — one row per dataset × optimizer:
+%   Dataset | Optimizer | Best composite | Repro | Motif | Recall | n_sites | Iters
+%   Report which optimizer achieved the higher composite per dataset and
+%   overall. Note iteration budget: LLM 10–12, Optuna 12–15.
+
+% ── 2. Optimization trajectories ──────────────────────────────────────
+%   Multi-panel figure (one panel per dataset): iteration vs. composite
+%   score for LLM (solid) and Optuna (dashed); horizontal baseline =
+%   default parameters. Note convergence speed and any collapse events
+%   (site count distribution inset or separate panel).
+
+% ── 3. Per-metric breakdown ────────────────────────────────────────────
+%   3a. Reproducibility — bar chart per dataset: observed overlap,
+%       chance-expected overlap, and chance-corrected score for the
+%       best parameter set of each optimizer. Highlight RBFOX2_K562
+%       (baseline ≈ 0.10, hardest dataset).
+%
+%   3b. Motif enrichment — table: best motif, hit rate, background rate,
+%       enrichment ratio, whether it matches the canonical motif, and
+%       PWM database source. Flag any dataset where the canonical motif
+%       is not the most enriched.
+%
+%   3c. Benchmark recall — per-dataset recall vs. ENCODE reference
+%       (chr21 only). Note the recall vs. n_sites trade-off if visible.
+
+% ── 4. Collapse guard ──────────────────────────────────────────────────
+%   Show n_binding_sites distribution across all trials for both
+%   optimizers. Demonstrate that both maintain healthy yields (≥10 sites)
+%   under the guard. If pre-guard data is available, include a before/after
+%   comparison for Optuna.
+\section{Discussion, Limitations \& Future Work}
+\label{discussion}
+
+% ── 1. Interpretation ─────────────────────────────────────────────────
+%   LLM advantage (if observed): biological priors (collapse avoidance,
+%   expected footprint, motif identity) give the LLM a head start that
+%   TPE must learn from data; delta-driven reversal of bad moves provides
+%   implicit gradient information.
+%   Optuna advantage (if observed): 7-parameter space is small enough for
+%   TPE to map quickly; LLM's one-param-at-a-time conservatism may limit
+%   multi-dimensional exploration; budget asymmetry (12–15 vs 10–12 iters)
+%   may confound the comparison.
+%   Broader point: LLM advantages likely scale with problem complexity.
+
+% ── 2. Biological interpretation ──────────────────────────────────────
+%   • RBFOX2_K562 (hardest): wider bandwidth (>50 nt) helped — suggests
+%     diffuse crosslink signal or broad footprints.
+%   • Cell-line effects: if optimal parameters differ between RBFOX2_K562
+%     and RBFOX2_HepG2, this validates the dataset-dependent tuning premise.
+%   • use_input_covariate: note whether enabling it consistently improved
+%     or hurt different datasets.
+
+% ── 3. Limitations ────────────────────────────────────────────────────
+%   (a) chr21-only: ~1.5% of the genome; results may not generalise to
+%       full-genome landscapes with different gene density and repeat content.
+%   (b) Small search space (~10^5 combinations): limits how much LLM
+%       reasoning can outperform systematic sampling.
+%   (c) Single LLM, no prompt ablation: only DeepSeek tested; no ablation
+%       of priors, delta table, or temperature.
+%   (d) Budget asymmetry: LLM 10–12 iters vs. Optuna 12–15 — not iso-budget.
+%   (e) Motif background: mononucleotide shuffle destroys dinucleotide
+%       context; dinucleotide shuffling would be more rigorous.
+%   (f) Benchmark reference: ENCODE "top regions" are themselves pipeline
+%       output, not manually curated gold standard.
+
+% ── 4. Future work ────────────────────────────────────────────────────
+%   (a) Genome-wide validation of best chr21 parameters.
+%   (b) IDR-based reproducibility (ENCODE standard) to replace simple
+%       overlap.
+%   (c) Dinucleotide-shuffled motif background.
+%   (d) LLM ablation: remove priors / delta table; test other models;
+%       iso-budget re-run.
+\section{Conclusion}
+\label{conclusion}
+
+% ── Outline (~0.25 page) ───────────────────────────────────────────────
+%   • Restate what was built: an automated eCLIP parameter optimization
+%     framework with two interchangeable optimizers (LLM + Optuna) and a
+%     biologically grounded composite objective.
+%   • Key finding: [state which optimizer performed better and on how many
+%     datasets], with the composite guard preventing degenerate solutions.
+%   • Main takeaway: LLM-guided optimization is a viable alternative to
+%     Bayesian search for small bioinformatics parameter spaces, and the
+%     approach is immediately transferable to other CLIP datasets or
+%     peak callers.

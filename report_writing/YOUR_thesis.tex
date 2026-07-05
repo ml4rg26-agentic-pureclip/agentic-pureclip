@@ -1,0 +1,33 @@
+\documentclass[oneside,a4paper,12pt]{article}
+
+\usepackage{thesis}
+\usepackage{enumitem}
+\usepackage{csquotes}
+\usepackage[backend=biber, style=apa]{biblatex}
+\usepackage{hyperref}
+\addbibresource{master.bib}
+
+\begin{document}
+\setlanguageEnglish
+
+\include{sections/preamble}
+
+\include{sections/1_introduction}
+\include{sections/2_theory}
+\include{sections/3_method}
+\include{sections/4_results}
+\include{sections/5_discussion}
+\include{sections/6_conclusion}
+\include{sections/7_appendix}
+
+
+
+% Anhang / Appendix
+\appendix % Ab hier wird mit A, B, ... weiternummeriert.
+
+\include{sections/8_appendix}
+
+% Literaturverzeichnis
+\printbibliography
+
+\end{document}
