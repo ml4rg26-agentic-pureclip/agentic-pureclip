@@ -16,6 +16,22 @@ MERGED_SITES = f"{RESULTS_DIR}/PureCLIP.crosslink_sites.bed"
 MERGED_REGIONS = f"{RESULTS_DIR}/PureCLIP.binding_regions.bed"
 BINDING_SITES = f"{RESULTS_DIR}/binding_sites.reproducible.bed"
 
+# Input (SMInput) control BAM for the PureCLIP input covariate. Only used when
+# pureclip.use_input_covariate is set and the control BAM is actually present.
+INPUT_BAM = ((config.get("samples", {}).get("input_control", {}) or {}).get("rep1", {}) or {}).get("bam")
+USE_INPUT_COVARIATE = bool(config["pureclip"].get("use_input_covariate")) and bool(INPUT_BAM)
+
+
+def covariate_inputs():
+    """Extra rule inputs so the control BAM's index is built when we use it."""
+    if USE_INPUT_COVARIATE:
+        return {"ibam": INPUT_BAM, "ibai": INPUT_BAM + ".bai"}
+    return {}
+
+
+# Shell fragment passed to pureclip2 to incorporate the input signal.
+COVARIATE_ARGS = f"-ibam {INPUT_BAM} -ibai {INPUT_BAM}.bai" if USE_INPUT_COVARIATE else ""
+
 ruleorder: merge_ip > index_input_bam
 
 
@@ -57,7 +73,8 @@ rule pureclip:
     input:
         bam=MERGED_BAM,
         bai=MERGED_BAI,
-        genome=config["reference"]["genome_fasta"]
+        genome=config["reference"]["genome_fasta"],
+        **covariate_inputs()
     output:
         sites=MERGED_SITES,
         regions=MERGED_REGIONS
@@ -65,13 +82,14 @@ rule pureclip:
         bw=config["pureclip"]["bandwidth_nt"],
         dm=config["pureclip"]["merge_distance_nt"],
         ld="-ld" if config["pureclip"]["high_precision_mode"] else "",
-        iv="-iv chr21 -chr chr21" if config["pureclip"].get("learn_on_chr21") else ""
+        iv="-iv chr21 -chr chr21" if config["pureclip"].get("learn_on_chr21") else "",
+        icov=COVARIATE_ARGS
     threads: config["resources"]["threads"]
     log:
         f"{RESULTS_DIR}/logs/pureclip_merged.log"
     shell:
         """
-        echo "[pureclip2 merged] bw={params.bw} dm={params.dm} ld='{params.ld}' iv='{params.iv}'" > {log}
+        echo "[pureclip2 merged] bw={params.bw} dm={params.dm} ld='{params.ld}' iv='{params.iv}' icov='{params.icov}'" > {log}
         pureclip2 \
             -i {input.bam} \
             -bai {input.bai} \
@@ -81,6 +99,7 @@ rule pureclip:
             -dm {params.dm} \
             {params.ld} \
             {params.iv} \
+            {params.icov} \
             -o {output.sites} \
             -or {output.regions} >> {log} 2>&1
         """
@@ -90,7 +109,8 @@ rule pureclip_per_replicate:
     input:
         bam=lambda wildcards: config["samples"]["ip"][wildcards.rep]["bam"],
         bai=lambda wildcards: config["samples"]["ip"][wildcards.rep]["bam"] + ".bai",
-        genome=config["reference"]["genome_fasta"]
+        genome=config["reference"]["genome_fasta"],
+        **covariate_inputs()
     output:
         sites=f"{RESULTS_DIR}/ip_{{rep}}/pureclip_sites.bed",
         regions=f"{RESULTS_DIR}/ip_{{rep}}/pureclip_regions.bed"
@@ -98,13 +118,14 @@ rule pureclip_per_replicate:
         bw=config["pureclip"]["bandwidth_nt"],
         dm=config["pureclip"]["merge_distance_nt"],
         ld="-ld" if config["pureclip"]["high_precision_mode"] else "",
-        iv="-iv chr21 -chr chr21" if config["pureclip"].get("learn_on_chr21") else ""
+        iv="-iv chr21 -chr chr21" if config["pureclip"].get("learn_on_chr21") else "",
+        icov=COVARIATE_ARGS
     threads: config["resources"]["threads"]
     log:
         f"{RESULTS_DIR}/ip_{{rep}}/logs/pureclip.log"
     shell:
         """
-        echo "[pureclip2 per-rep] rep={wildcards.rep} bw={params.bw} dm={params.dm} iv='{params.iv}'" > {log}
+        echo "[pureclip2 per-rep] rep={wildcards.rep} bw={params.bw} dm={params.dm} iv='{params.iv}' icov='{params.icov}'" > {log}
         pureclip2 \
             -i {input.bam} \
             -bai {input.bai} \
@@ -114,6 +135,7 @@ rule pureclip_per_replicate:
             -dm {params.dm} \
             {params.ld} \
             {params.iv} \
+            {params.icov} \
             -o {output.sites} \
             -or {output.regions} >> {log} 2>&1
         """
@@ -130,7 +152,7 @@ rule postprocess:
     log:
         f"{RESULTS_DIR}/logs/postprocess.log"
     shell:
-        "PYTHONPATH=. python workflow/postprocess.py {params.config_path} {output.bed} {input.regions} 2>&1 | tee {log}"
+        "PYTHONPATH=. python workflow/postprocess.py {params.config_path} {output.bed} {input.regions} {input.sites} 2>&1 | tee {log}"
 
 
 rule score:
