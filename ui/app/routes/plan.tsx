@@ -136,7 +136,7 @@ export default function Plan() {
       <div className="page-title">Plan run</div>
       <div className="page-sub">
         Configure a parameter search and launch it on the server. This writes a standard manifest and
-        runs the same CLI optimizer (<code>scripts/overnight_batch.py</code>), so it stays CLI-compatible.
+        runs the same CLI optimizer (<code>scripts/run/overnight_batch.py</code>), so it stays CLI-compatible.
       </div>
 
       {result?.ok ? (

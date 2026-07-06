@@ -3,7 +3,7 @@
 # now that 1-site collapses score ~0, does Optuna find *real* solutions on QKI?
 # Distinct job ids (_r2) keep this separate from the first 12h run's data.
 #
-#   PYTHONPATH=. uv run python scripts/overnight_batch.py \
+#   PYTHONPATH=. uv run python scripts/run/overnight_batch.py \
 #       --manifest config/bigrun2_jobs.yaml --hours 12 --no-repeat \
 #       --pureclip-dir /vol/storage1/johannes/projects
 

@@ -4,14 +4,14 @@ import pytest
 from unittest.mock import patch
 
 # Save the original API key status to determine if we should skip the real API test later.
-# Inject a dummy key if it's missing so that importing agent.graph_mock doesn't
+# Inject a dummy key if it's missing so that importing agentic_pureclip.loop.graph_mock doesn't
 # crash with pydantic_core._pydantic_core.ValidationError during test collection.
 _original_api_key = os.environ.get("GOOGLE_API_KEY", "")
 if not _original_api_key:
     os.environ["GOOGLE_API_KEY"] = "dummy_key_for_tests"
 
-from agent.graph_mock import build_graph, AgentState, CONFIG_PATH
-import agent.graph_mock
+from agentic_pureclip.loop.graph_mock import build_graph, AgentState, CONFIG_PATH
+import agentic_pureclip.loop.graph_mock
 import yaml
 import json
 from pathlib import Path
@@ -45,8 +45,8 @@ def get_initial_state(max_iterations=5, patience=2):
 
 def test_convergence_plateau():
     """Test that plateau mode halts execution due to convergence."""
-    with patch.object(agent.graph_mock, "USE_GEMINI", False), \
-         patch.object(agent.graph_mock, "SCORE_MODE", "plateau"):
+    with patch.object(agentic_pureclip.loop.graph_mock, "USE_GEMINI", False), \
+         patch.object(agentic_pureclip.loop.graph_mock, "SCORE_MODE", "plateau"):
         
         graph = build_graph()
         initial_state = get_initial_state(max_iterations=10)
@@ -59,8 +59,8 @@ def test_convergence_plateau():
 
 def test_hard_cap_always_up():
     """Test that always_up mode halts execution due to hard cap max iterations."""
-    with patch.object(agent.graph_mock, "USE_GEMINI", False), \
-         patch.object(agent.graph_mock, "SCORE_MODE", "always_up"):
+    with patch.object(agentic_pureclip.loop.graph_mock, "USE_GEMINI", False), \
+         patch.object(agentic_pureclip.loop.graph_mock, "SCORE_MODE", "always_up"):
         
         graph = build_graph()
         initial_state = get_initial_state()
@@ -83,8 +83,8 @@ def test_real_gemini_api():
     if not _original_api_key:
         pytest.skip("Skipping real API test: valid GOOGLE_API_KEY not found in .env")
 
-    with patch.object(agent.graph_mock, "USE_GEMINI", True), \
-         patch.object(agent.graph_mock, "SCORE_MODE", "plateau"):
+    with patch.object(agentic_pureclip.loop.graph_mock, "USE_GEMINI", True), \
+         patch.object(agentic_pureclip.loop.graph_mock, "SCORE_MODE", "plateau"):
         
         graph = build_graph()
         # We only run 2 iterations to save API quota and time

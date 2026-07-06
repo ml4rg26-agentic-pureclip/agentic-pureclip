@@ -1,7 +1,7 @@
-import agent.optuna_runner as orr
-from agent.decisions import DEFAULT_OBJECTIVE_WEIGHTS
-from pipeline.configs import DEFAULT_SEARCH_BOUNDS
-from pipeline.datasets import dataset_to_config
+import agentic_pureclip.loop.optuna_runner as orr
+from agentic_pureclip.scoring.objective import DEFAULT_OBJECTIVE_WEIGHTS
+from agentic_pureclip.pipeline.configs import DEFAULT_SEARCH_BOUNDS
+from agentic_pureclip.pipeline.datasets import dataset_to_config
 
 
 def test_optuna_runs_budget_and_respects_bounds(monkeypatch):

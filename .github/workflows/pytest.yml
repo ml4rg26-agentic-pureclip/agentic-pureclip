@@ -6,13 +6,13 @@ on:
       - master
       - develop
     paths-ignore:
-      - 'report_writing/**'
+      - 'docs/report/**'
   pull_request:
     branches:
       - master
       - develop
     paths-ignore:
-      - 'report_writing/**'
+      - 'docs/report/**'
 
 jobs:
   test:

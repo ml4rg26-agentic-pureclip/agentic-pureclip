@@ -1,0 +1,147 @@
+# workflow/Snakefile
+import os
+
+
+CONFIG_PATH = os.environ.get("CONFIG_PATH", "config/run_config.yaml")
+configfile: CONFIG_PATH
+
+
+IP_REPS = list(config["samples"]["ip"].keys())
+RESULTS_DIR = str(config.get("output", {}).get("results_dir", "results")).replace("\\", "/").rstrip("/")
+SCORE_REPORT = str(config.get("output", {}).get("score_report", f"{RESULTS_DIR}/score_report.json")).replace("\\", "/")
+
+MERGED_BAM = f"{RESULTS_DIR}/merged_ip.bam"
+MERGED_BAI = f"{RESULTS_DIR}/merged_ip.bam.bai"
+MERGED_SITES = f"{RESULTS_DIR}/PureCLIP.crosslink_sites.bed"
+MERGED_REGIONS = f"{RESULTS_DIR}/PureCLIP.binding_regions.bed"
+BINDING_SITES = f"{RESULTS_DIR}/binding_sites.reproducible.bed"
+
+ruleorder: merge_ip > index_input_bam
+
+
+rule all:
+    input:
+        MERGED_SITES,
+        MERGED_REGIONS,
+        BINDING_SITES,
+        expand(f"{RESULTS_DIR}/ip_{{rep}}/pureclip_sites.bed", rep=IP_REPS),
+        SCORE_REPORT
+
+
+rule index_input_bam:
+    input:
+        bam="{bam}.bam"
+    output:
+        bai="{bam}.bam.bai"
+    shell:
+        "samtools index {input.bam}"
+
+
+rule merge_ip:
+    input:
+        [config["samples"]["ip"][rep]["bam"] for rep in IP_REPS]
+    output:
+        bam=MERGED_BAM,
+        bai=MERGED_BAI
+    log:
+        f"{RESULTS_DIR}/logs/merge_ip.log"
+    shell:
+        """
+        echo "[merge_ip] inputs={input}" > {log}
+        samtools merge -f {output.bam} {input} >> {log} 2>&1
+        samtools index {output.bam} >> {log} 2>&1
+        """
+
+
+rule pureclip:
+    input:
+        bam=MERGED_BAM,
+        bai=MERGED_BAI,
+        genome=config["reference"]["genome_fasta"]
+    output:
+        sites=MERGED_SITES,
+        regions=MERGED_REGIONS
+    params:
+        bw=config["pureclip"]["bandwidth_nt"],
+        dm=config["pureclip"]["merge_distance_nt"],
+        ld="-ld" if config["pureclip"]["high_precision_mode"] else "",
+        iv="-iv chr21 -chr chr21" if config["pureclip"].get("learn_on_chr21") else ""
+    threads: config["resources"]["threads"]
+    log:
+        f"{RESULTS_DIR}/logs/pureclip_merged.log"
+    shell:
+        """
+        echo "[pureclip2 merged] bw={params.bw} dm={params.dm} ld='{params.ld}' iv='{params.iv}'" > {log}
+        pureclip2 \
+            -i {input.bam} \
+            -bai {input.bai} \
+            -g {input.genome} \
+            -nt {threads} \
+            -bw {params.bw} \
+            -dm {params.dm} \
+            {params.ld} \
+            {params.iv} \
+            -o {output.sites} \
+            -or {output.regions} >> {log} 2>&1
+        """
+
+
+rule pureclip_per_replicate:
+    input:
+        bam=lambda wildcards: config["samples"]["ip"][wildcards.rep]["bam"],
+        bai=lambda wildcards: config["samples"]["ip"][wildcards.rep]["bam"] + ".bai",
+        genome=config["reference"]["genome_fasta"]
+    output:
+        sites=f"{RESULTS_DIR}/ip_{{rep}}/pureclip_sites.bed",
+        regions=f"{RESULTS_DIR}/ip_{{rep}}/pureclip_regions.bed"
+    params:
+        bw=config["pureclip"]["bandwidth_nt"],
+        dm=config["pureclip"]["merge_distance_nt"],
+        ld="-ld" if config["pureclip"]["high_precision_mode"] else "",
+        iv="-iv chr21 -chr chr21" if config["pureclip"].get("learn_on_chr21") else ""
+    threads: config["resources"]["threads"]
+    log:
+        f"{RESULTS_DIR}/ip_{{rep}}/logs/pureclip.log"
+    shell:
+        """
+        echo "[pureclip2 per-rep] rep={wildcards.rep} bw={params.bw} dm={params.dm} iv='{params.iv}'" > {log}
+        pureclip2 \
+            -i {input.bam} \
+            -bai {input.bai} \
+            -g {input.genome} \
+            -nt {threads} \
+            -bw {params.bw} \
+            -dm {params.dm} \
+            {params.ld} \
+            {params.iv} \
+            -o {output.sites} \
+            -or {output.regions} >> {log} 2>&1
+        """
+
+
+rule postprocess:
+    input:
+        regions=MERGED_REGIONS,
+        sites=MERGED_SITES
+    output:
+        bed=BINDING_SITES
+    params:
+        config_path=CONFIG_PATH
+    log:
+        f"{RESULTS_DIR}/logs/postprocess.log"
+    shell:
+        "python -m agentic_pureclip.postprocess.postprocess {params.config_path} {output.bed} {input.regions} 2>&1 | tee {log}"
+
+
+rule score:
+    input:
+        merged_sites=BINDING_SITES,
+        rep_regions=expand(f"{RESULTS_DIR}/ip_{{rep}}/pureclip_regions.bed", rep=IP_REPS)
+    output:
+        report=SCORE_REPORT
+    params:
+        config_path=CONFIG_PATH
+    log:
+        f"{RESULTS_DIR}/logs/score.log"
+    shell:
+        "python -m agentic_pureclip.scoring.run_scorers {params.config_path} {output.report} > {log} 2>&1"

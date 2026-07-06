@@ -1,5 +1,5 @@
-from pipeline.motifs import MotifPWM, scan_sequence_with_pwm
-from agent.decisions import composite_objective
+from agentic_pureclip.pipeline.motifs import MotifPWM, scan_sequence_with_pwm
+from agentic_pureclip.scoring.objective import composite_objective
 
 
 def _conserved_pwm(consensus: str) -> MotifPWM:

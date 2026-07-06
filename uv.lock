@@ -17,7 +17,7 @@ resolution-markers = [
 [[package]]
 name = "agentic-pureclip"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "gdown" },
     { name = "langchain-google-genai" },

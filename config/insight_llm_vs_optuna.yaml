@@ -16,7 +16,7 @@
 #
 # Launch (on the runner):
 #   export PATH=/vol/storage1/johannes/projects:$HOME/.local/bin:$PATH
-#   PYTHONPATH=. uv run python scripts/overnight_batch.py \
+#   PYTHONPATH=. uv run python scripts/run/overnight_batch.py \
 #       --manifest config/insight_llm_vs_optuna.yaml --hours 16 --no-repeat \
 #       --pureclip-dir /vol/storage1/johannes/projects
 

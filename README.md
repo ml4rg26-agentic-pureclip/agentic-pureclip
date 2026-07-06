@@ -19,7 +19,7 @@ PureCLIP → post-processes to a standardized footprint → scores. The optimize
 loops this, searching for the parameters that give the most trustworthy
 binding sites.
 
-### Objective (`agent/decisions.py::composite_objective`)
+### Objective (`agentic_pureclip.scoring.objective::composite_objective`)
 
 ```
 composite = (0.5·reproducibility + 0.25·motif + 0.25·recall) × min(1, n_sites/10)
@@ -44,12 +44,15 @@ uv run python -m pytest tests/ -q   # tests (DEEPSEEK_API_KEY=dummy is fine)
 
 ### Run an optimization
 
+`uv sync` installs the project editable, so the `agentic_pureclip` package and
+its `python -m` entry points resolve without a `PYTHONPATH` hack.
+
 ```bash
 # LLM agent
-CONFIG_PATH=config/run_config.yaml MAX_ITER=8 PYTHONPATH=. uv run python agent/graph.py
+CONFIG_PATH=config/run_config.yaml MAX_ITER=8 uv run python -m agentic_pureclip.loop.graph
 
 # Optuna (same eval + objective, no API key)
-CONFIG_PATH=config/run_config.yaml MAX_ITER=12 PYTHONPATH=. uv run python agent/optuna_runner.py
+CONFIG_PATH=config/run_config.yaml MAX_ITER=12 uv run python -m agentic_pureclip.loop.optuna_runner
 ```
 
 `learn_on_chr21: true` in the config restricts PureCLIP to chr21 ("fast mode",
@@ -58,24 +61,24 @@ parameters are saved to `config/best_config.yaml`.
 
 ### Failure-tolerant batches
 
-`scripts/overnight_batch.py` runs many jobs within a wall-clock budget, isolating
+`scripts/run/overnight_batch.py` runs many jobs within a wall-clock budget, isolating
 each job and never aborting the batch on a failure. Manifests live in `config/`
 (e.g. `bigrun2_jobs.yaml`). Results accumulate in `results/overnight/`
 (`iterations.jsonl`, `jobs.jsonl`, `summary.csv`, `<job>/decisions.jsonl`).
 
 ```bash
-PYTHONPATH=. uv run python scripts/overnight_batch.py \
+uv run python scripts/run/overnight_batch.py \
     --manifest config/bigrun2_jobs.yaml --hours 12 --no-repeat \
     --pureclip-dir /vol/storage1/johannes/projects
 ```
 
 ### Dashboard + UI
 
-`scripts/monitor.py` serves a JSON API (`/api/status`, `/api/runs`,
+`scripts/dashboard/monitor.py` serves a JSON API (`/api/status`, `/api/runs`,
 `/api/options`, `POST /api/schedule`) and the built React UI.
 
 ```bash
-PYTHONPATH=. uv run python scripts/monitor.py --port 8888      # backend + UI
+uv run python scripts/dashboard/monitor.py --port 8888                   # backend + UI
 cd ui && npm install && npm run dev                            # UI dev (proxies /api)
 cd ui && npm run build                                         # SPA → ui/build/client
 ```
@@ -86,26 +89,32 @@ schedule a run), **Variables** (plain-English guide to every knob).
 
 ## Datasets
 
-Registered in `pipeline/datasets.py`: RBFOX2_K562, RBFOX2_HepG2, QKI_K562,
+Registered in `agentic_pureclip.pipeline.datasets`: RBFOX2_K562, RBFOX2_HepG2, QKI_K562,
 QKI_HepG2, PUM1_K562 (+ ENCORE_RBFOX2_K562). `data/` and `results/` are
 gitignored. Regenerate a dataset config:
 
 ```bash
-python scripts/write_dataset_config.py RBFOX2_K562 --out config/datasets/RBFOX2_K562.yaml
+python scripts/data/write_dataset_config.py RBFOX2_K562 --out config/datasets/RBFOX2_K562.yaml
 ```
 
 ## Repo layout
 
-| Dir | What |
-|-----|------|
-| `agent/` | Optimizers: `graph.py` (LLM), `optuna_runner.py` (TPE), `evaluation.py` (shared eval), `decisions.py` (objective + prompt) |
-| `pipeline/` | `configs.py` (bounds/validation), `datasets.py`, `motifs.py` (PWM log-odds), `runner.py` |
-| `workflow/` | `Snakefile`, `postprocess.py` |
-| `scorers/` | `run_scorers.py` (reproducibility, motif, recall) |
-| `scripts/` | `overnight_batch.py`, `monitor.py`, data prep |
+The core is one installable package, `src/agentic_pureclip/`, whose subpackages
+are the three things this project contributes — the optimization **loop**, the
+**scoring**, and the **postprocessing** — with the un-glamorous plumbing kept
+separate under `pipeline/`.
+
+| Path | What |
+|------|------|
+| `src/agentic_pureclip/loop/` | **The optimization loop.** `graph.py` (LLM/LangGraph), `optuna_runner.py` (TPE) — interchangeable optimizers sharing `evaluation.py` (one iter: run → score → objective), `state.py`, `report.py` |
+| `src/agentic_pureclip/scoring/` | **Quality signals + objective.** `run_scorers.py` (reproducibility, motif, recall) and `objective.py` (`composite_objective`, weights, prompt) |
+| `src/agentic_pureclip/postprocess/` | **Standardized footprint.** `postprocess.py` (filter/format PureCLIP output) + the `Snakefile` that drives the pipeline |
+| `src/agentic_pureclip/pipeline/` | Plumbing: `configs.py` (bounds/validation), `datasets.py`, `motifs.py` (PWM log-odds), `runner.py` (invokes Snakemake), `logging_config.py` |
+| `scripts/` | Ops utilities grouped by purpose: `data/` (download + prepare datasets), `motifs/` (motif library), `run/` (`batch_runner.py`, `overnight_batch.py`), `dashboard/` (`monitor.py` backend + `start_ui.sh`) |
 | `ui/` | React Router SPA |
 | `config/` | run configs, dataset configs, batch manifests, priors |
 | `tests/` | pytest suite |
+| `docs/` | architecture notes, meeting artifacts, and the LaTeX thesis (`docs/report/`) |
 
 ## Compute VM
 

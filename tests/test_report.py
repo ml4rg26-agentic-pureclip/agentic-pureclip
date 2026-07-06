@@ -1,6 +1,6 @@
 import yaml
 import pytest
-from agent.report import main
+from agentic_pureclip.loop.report import main
 import sys
 from unittest.mock import patch
 

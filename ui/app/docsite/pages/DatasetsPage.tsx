@@ -195,7 +195,7 @@ export default function DatasetsPage() {
         (chr21-restricted) optimization for all 20:
       </p>
       <pre className="bg-gray-900 border border-gray-800 rounded-lg px-4 py-3 mt-2 text-sm text-amber-200 overflow-x-auto">
-uv run python scripts/batch_runner.py --manifest config/new_batch_runs.yaml --parallel 4</pre>
+uv run python scripts/run/batch_runner.py --manifest config/new_batch_runs.yaml --parallel 4</pre>
 
       <div className="mt-6 rounded-xl border border-emerald-500/60 bg-emerald-950/30 px-5 py-4">
         <p className="text-emerald-300 font-semibold">Recommendation</p>
