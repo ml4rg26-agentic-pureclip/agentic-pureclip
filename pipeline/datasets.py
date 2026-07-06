@@ -119,6 +119,61 @@ DATASETS: dict[str, DatasetSpec] = {
 }
 
 
+def _standard_spec(
+    name: str,
+    target_protein: str,
+    cell_line: str,
+    ip1: str,
+    ip2: str,
+    smi: str,
+) -> DatasetSpec:
+    """Build a DatasetSpec for a dataset laid out in the standard data/<name>/ tree
+    (canonical _v1 BAMs plus the usual benchmark files)."""
+    base = f"data/{name}"
+    return DatasetSpec(
+        name=name,
+        target_protein=target_protein,
+        cell_line=cell_line,
+        ip_rep1_bam=f"{base}/bam/ip_rep1_v1/{ip1}.bam",
+        ip_rep2_bam=f"{base}/bam/ip_rep2_v1/{ip2}.bam",
+        input_bam=f"{base}/bam/smi_v1/{smi}.bam",
+        top_regions_bed=f"{base}/top_regions/regions.bed6",
+        top_crosslinks_bed=f"{base}/top_crosslink_sites/crosslinks.bed6",
+        top_genes=f"{base}/top_genes/list.txt",
+        biotypes_tsv=f"{base}/biotypes_genetypes/biotypes_proportions.tsv",
+        genotypes_tsv=f"{base}/biotypes_genetypes/genetypes_proportions.tsv",
+    )
+
+
+# New ENCODE eCLIP datasets from the 2026-07 Google-Drive batches (canonical v1 BAMs).
+# (dataset, target_protein, cell_line, ip_rep1, ip_rep2, smi/input)
+_NEW_ENCODE_DATASETS: list[tuple[str, str, str, str, str, str]] = [
+    ("HNRNPK_HepG2", "HNRNPK", "HepG2", "ENCFF198ISB", "ENCFF553XCL", "ENCFF019JFZ"),
+    ("HNRNPK_K562", "HNRNPK", "K562", "ENCFF894NKS", "ENCFF405ESF", "ENCFF399CEH"),
+    ("HNRNPM_HepG2", "HNRNPM", "HepG2", "ENCFF950RRY", "ENCFF633FLY", "ENCFF355NYZ"),
+    ("HNRNPM_K562", "HNRNPM", "K562", "ENCFF050PTL", "ENCFF379LZD", "ENCFF532ADX"),
+    ("SF3B1_K562", "SF3B1", "K562", "ENCFF564ARY", "ENCFF959GNA", "ENCFF359HHB"),
+    ("SF3B4_HepG2", "SF3B4", "HepG2", "ENCFF040BYE", "ENCFF483VLR", "ENCFF072CLZ"),
+    ("SF3B4_K562", "SF3B4", "K562", "ENCFF095KWC", "ENCFF173BOO", "ENCFF735PKL"),
+    ("SFPQ_HepG2", "SFPQ", "HepG2", "ENCFF857OFG", "ENCFF056KWN", "ENCFF949MMS"),
+    ("SRSF1_HepG2", "SRSF1", "HepG2", "ENCFF867TIG", "ENCFF418ZXO", "ENCFF467FPH"),
+    ("SRSF1_K562", "SRSF1", "K562", "ENCFF595NHE", "ENCFF369EUU", "ENCFF241WHP"),
+    ("U2AF1_HepG2", "U2AF1", "HepG2", "ENCFF755DUB", "ENCFF059KEP", "ENCFF076WAG"),
+    ("U2AF1_K562", "U2AF1", "K562", "ENCFF314SWS", "ENCFF132PVT", "ENCFF948OYU"),
+    ("U2AF2_HepG2", "U2AF2", "HepG2", "ENCFF358STL", "ENCFF033XVX", "ENCFF825YLL"),
+    ("U2AF2_K562", "U2AF2", "K562", "ENCFF835KXL", "ENCFF936JSP", "ENCFF227TON"),
+    ("RBM22_HepG2", "RBM22", "HepG2", "ENCFF051SNH", "ENCFF169EKN", "ENCFF615UKX"),
+    ("RBM22_K562", "RBM22", "K562", "ENCFF045LAO", "ENCFF391IBH", "ENCFF802LNA"),
+    ("PCBP1_HepG2", "PCBP1", "HepG2", "ENCFF138HUE", "ENCFF933ESS", "ENCFF759UTZ"),
+    ("PCBP1_K562", "PCBP1", "K562", "ENCFF041ETC", "ENCFF345TZP", "ENCFF647AFT"),
+    ("PUM2_K562", "PUM2", "K562", "ENCFF231WHF", "ENCFF732EQX", "ENCFF786ZZB"),
+    ("PTBP1_HepG2", "PTBP1", "HepG2", "ENCFF295MQP", "ENCFF386UIG", "ENCFF895BNM"),
+]
+
+for _n, _p, _c, _ip1, _ip2, _smi in _NEW_ENCODE_DATASETS:
+    DATASETS[_n] = _standard_spec(_n, _p, _c, _ip1, _ip2, _smi)
+
+
 def list_datasets() -> list[str]:
     return sorted(DATASETS)
 

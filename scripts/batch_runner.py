@@ -36,6 +36,9 @@ def load_manifest(path: str = "config/batch_runs.yaml") -> list[dict]:
     return data["runs"]
 
 
+DEFAULT_MANIFEST = "config/batch_runs.yaml"
+
+
 def write_run_config(run: dict, out_path: str) -> None:
     """Generate a run_config.yaml for a specific dataset + settings."""
     dataset = run["dataset"]
@@ -110,9 +113,10 @@ def main():
     parser.add_argument("--ids", nargs="*", help="Run only matching IDs (glob patterns)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would run")
     parser.add_argument("--parallel", type=int, default=1, help="Number of parallel runs")
+    parser.add_argument("--manifest", default=DEFAULT_MANIFEST, help="Path to run manifest YAML")
     args = parser.parse_args()
 
-    manifest = load_manifest()
+    manifest = load_manifest(args.manifest)
     os.makedirs("config/batch", exist_ok=True)
 
     # Filter by --ids

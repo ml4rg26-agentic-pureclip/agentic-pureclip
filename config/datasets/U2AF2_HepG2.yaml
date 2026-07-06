@@ -1,0 +1,100 @@
+run_id: U2AF2_HepG2_iter_00
+dataset_id: U2AF2_HepG2
+target_protein: U2AF2
+cell_line: HepG2
+clip_protocol: eCLIP
+samples:
+  ip:
+    rep1:
+      bam: data/U2AF2_HepG2/bam/ip_rep1_v1/ENCFF358STL.bam
+    rep2:
+      bam: data/U2AF2_HepG2/bam/ip_rep2_v1/ENCFF033XVX.bam
+  input_control:
+    rep1:
+      bam: data/U2AF2_HepG2/bam/smi_v1/ENCFF825YLL.bam
+reference:
+  genome_fasta: data/GRCh38.primary_assembly.genome.fa/GRCh38.primary_assembly.genome.fa
+  annotation_gtf: null
+priors:
+  target_protein: U2AF2
+  clip_protocol: eCLIP
+  expected_footprint_width_nt: 9
+  known_motifs:
+  - pattern: TTTTTCAGGTT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.0
+    consensus: TTTTTCAGGTT
+  - pattern: TTCTTTCAGTT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.1
+    consensus: TTCTTTCAGTT
+  - pattern: TTTCTAGGTTT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.2
+    consensus: TTTCTAGGTTT
+  - pattern: TTTTCTTCCTT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.3
+    consensus: TTTTCTTCCTT
+  - pattern: TTTTCTAGGTT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.4
+    consensus: TTTTCTAGGTT
+  - pattern: TTTTTCTCCCT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.5
+    consensus: TTTTTCTCCCT
+  - pattern: TTTTCACAGGT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.6
+    consensus: TTTTCACAGGT
+  - pattern: TTTCTTCTTTT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.7
+    consensus: TTTCTTCTTTT
+  - pattern: TTTTCCTTCCT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.8
+    consensus: TTTTCCTTCCT
+  - pattern: TTCTTCTAGGT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.U2AF2.9
+    consensus: TTCTTCTAGGT
+  primary_objective_metric: replicate_agreement
+pureclip:
+  bandwidth_nt: 50
+  merge_distance_nt: 8
+  high_precision_mode: false
+  use_input_covariate: true
+  use_cl_motif_covariate: false
+  cl_motif_file: null
+postprocessing:
+  force_width: 9
+  cluster_gap_width: 8
+  min_region_length_nt: 3
+  min_crosslink_events: 3
+reproducibility:
+  percentile_threshold: 10
+  min_crosslink_events_floor: 2
+  min_replicates_passing: 2
+benchmark:
+  top_regions_bed: data/U2AF2_HepG2/top_regions/regions.bed6
+  top_crosslinks_bed: data/U2AF2_HepG2/top_crosslink_sites/crosslinks.bed6
+  top_genes: data/U2AF2_HepG2/top_genes/list.txt
+  biotypes_tsv: data/U2AF2_HepG2/biotypes_genetypes/biotypes_proportions.tsv
+  genotypes_tsv: data/U2AF2_HepG2/biotypes_genetypes/genetypes_proportions.tsv
+output:
+  results_dir: results/datasets/U2AF2_HepG2
+resources:
+  max_memory_gb: 16
+  threads: 8
