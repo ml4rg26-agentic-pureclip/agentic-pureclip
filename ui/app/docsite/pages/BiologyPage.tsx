@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import conceptMapData from '../data/concept-map.json'
+import conceptMapData from '../content/concept-map.json'
 
 interface Concept {
   id: string

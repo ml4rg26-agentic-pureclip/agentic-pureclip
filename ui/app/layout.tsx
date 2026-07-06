@@ -22,6 +22,13 @@ export default function Layout() {
             <span className="ico">⚙️</span><span>Variables</span>
           </NavLink>
         </nav>
+
+        <div className="nav-section">Reference</div>
+        <nav className="nav">
+          <NavLink to="/docs">
+            <span className="ico">📚</span><span>Docs</span>
+          </NavLink>
+        </nav>
       </aside>
 
       <main className="main">

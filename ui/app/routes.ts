@@ -6,5 +6,12 @@ export default [
     route("runs", "routes/runs.tsx"),
     route("plan", "routes/plan.tsx"),
     route("variables", "routes/variables.tsx"),
+    route("docs", "docsite/DocsLayout.tsx", [
+      index("docsite/index.tsx"),
+      route("bio-terms", "docsite/pages/BiologyPage.tsx"),
+      route("bio-concepts", "docsite/pages/BioConceptsPage.tsx"),
+      route("data", "docsite/pages/DataPage.tsx"),
+      route("logic", "docsite/pages/LogicPage.tsx"),
+    ]),
   ]),
 ] satisfies RouteConfig;

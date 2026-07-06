@@ -12,7 +12,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import dagre from 'dagre'
-import systemMapData from '../data/system-map.json'
+import systemMapData from '../content/system-map.json'
 import CustomNode, {
   CATEGORY_THEME,
   getTheme,

@@ -14,7 +14,7 @@ import ReactFlow, {
 } from 'reactflow'
 import 'reactflow/dist/style.css'
 import dagre from 'dagre'
-import conceptMapData from '../data/concept-map.json'
+import conceptMapData from '../content/concept-map.json'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

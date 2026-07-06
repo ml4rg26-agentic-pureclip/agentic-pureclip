@@ -7,7 +7,7 @@
 
 import { useState, useRef, Fragment } from 'react'
 import { createPortal } from 'react-dom'
-import conceptMapData from '../data/concept-map.json'
+import conceptMapData from '../content/concept-map.json'
 
 interface TermEntry {
   term: string
