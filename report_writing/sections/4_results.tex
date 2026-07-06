@@ -1,0 +1,34 @@
+\section{Results}
+\label{results}
+
+% ── 1. LLM vs. Optuna head-to-head ────────────────────────────────────
+%   TABLE — one row per dataset × optimizer:
+%   Dataset | Optimizer | Best composite | Repro | Motif | Recall | n_sites
+%   State which optimizer won per dataset and overall. Note the budget
+%   asymmetry (LLM 10–12 iters, Optuna 12–15) as a caveat.
+%   Multi-panel figure: iteration vs. composite for both optimizers,
+%   default-parameter baseline marked. Highlights convergence speed
+%   and whether LLM reasoning led to stepwise improvements.
+
+% ── 2. Biological quality of the optimized sites ──────────────────────
+%   2a. Reproducibility — bar chart per dataset: observed vs. chance-
+%       expected overlap and the corrected score. Highlight RBFOX2_K562
+%       as the hardest case (baseline ≈ 0.10).
+%   2b. Motif enrichment — table: best motif, hit rate, background rate,
+%       enrichment, canonical match (Yes/No), PWM source. Note any
+%       dataset where the canonical motif is not top-ranked.
+%   2c. Benchmark recall — per-dataset recovery of ENCODE reference
+%       regions (chr21). Note recall vs. n_sites trade-off if visible.
+
+% ── 3. Dataset-specific findings ──────────────────────────────────────
+%   • Which parameters converged to similar values across datasets
+%     (suggesting universal optima) vs. diverged (dataset-dependent)?
+%   • RBFOX2_K562 vs. RBFOX2_HepG2: do optimal parameters differ for
+%     the same RBP in different cell lines? (validates tuning premise)
+%   • Any dataset where the LLM's reasoning trace reveals a biologically
+%     interpretable decision (e.g. "widening bandwidth improved repro").
+
+% ── 4. Collapse guard effectiveness ───────────────────────────────────
+%   n_binding_sites distribution across all trials. Demonstrate healthy
+%   yields under the guard; if pre-guard data exists, before/after
+%   comparison for Optuna.
