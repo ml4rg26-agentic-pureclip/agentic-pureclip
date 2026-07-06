@@ -1,6 +1,18 @@
 \section{Introduction}
 \label{introduction}
 
+\scaffold{Bullets to expand into prose. Existing \% comments below give the intended narrative order.}
+\begin{itemize}
+  \item RBPs drive post-transcriptional regulation; mapping their binding sites genome-wide is central to RNA biology. eCLIP yields aligned reads, so a \emph{peak caller} is required to turn reads into discrete binding sites.
+  \item PureCLIP's output is highly sensitive to a few numeric parameters, and there is no universal optimum --- the best values depend on RBP, cell line and antibody efficiency.
+  \item Manual tuning does not scale (hours per genome-wide run, subjective, dozens of ENCODE datasets) --- motivating an automated, reproducible framework.
+  \item Contribution: an automated \emph{propose $\rightarrow$ run $\rightarrow$ score $\rightarrow$ iterate} framework with two interchangeable optimizers on identical evaluation infrastructure --- an LLM agent (biological priors + reasoning) vs.\ Optuna/TPE (black-box Bayesian search).
+  \item Scope: the study grew from a 3-RBP, crisp-motif pilot (RBFOX2, QKI, PUM1) to \textbf{26 datasets across 12+ RBPs}, adding a class of \emph{splicing factors} whose motifs are degenerate or positional --- a deliberate stress-test of generalization.
+  \item Research question: does LLM reasoning add value over principled numerical optimization for a small bioinformatics parameter space --- and \emph{does that value depend on how hard the RBP's motif is}?
+  \item \TODO{Fix the final reported scope: pilot (5 datasets, fully compared) vs.\ the expanded 26-dataset study. The LLM-vs-Optuna comparison on the 20 new datasets is still running (see Results).}
+  \item \TODO{Add 1--2 sentences on why splicing factors matter clinically (splicing dysregulation in cancer/neurological disease) to strengthen motivation.}
+\end{itemize}
+
 % Goal: motivate WHY automated parameter optimization is needed.
 % Do not explain PureCLIP internals or the objective formula here.
 
