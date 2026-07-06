@@ -80,11 +80,13 @@ def execute_run(run: dict) -> dict:
 
     elapsed = time.time() - t0
 
-    # Parse best score from output
+    # Parse best score from output. agent.graph ends with
+    #   "DONE. <reason>. Best composite score=<float>"
+    # (older optuna runs used "Best replicate_agreement=<float>"); accept either.
     best_score = None
     termination = "unknown"
     for line in result.stdout.split("\n") + result.stderr.split("\n"):
-        if "Best replicate_agreement" in line:
+        if "Best composite score" in line or "Best replicate_agreement" in line:
             try:
                 best_score = float(line.split("=")[-1].strip())
             except ValueError:

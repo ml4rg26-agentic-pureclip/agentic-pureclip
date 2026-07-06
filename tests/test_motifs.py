@@ -40,6 +40,23 @@ def test_flat_position_scores_near_zero():
     assert abs(high) < 0.05 and abs(low) < 0.05
 
 
+def test_pssm_with_negative_cells_does_not_crash():
+    # RBPmap *_PSSM matrices store log-odds values that can be negative.
+    # Normalizing those by their row sum yields negative pseudo-frequencies;
+    # log_odds must clamp them instead of raising "math domain error".
+    pssm = MotifPWM(
+        motif_id="HNRNPK_gccca_human_PSSM", rbp_name="HNRNPK", database="RBPmap_1.2",
+        pwm=[{"A": -2.1, "C": 3.4, "G": -1.8, "T": -2.0},
+             {"A": -3.0, "C": 4.1, "G": -2.5, "T": -2.2},
+             {"A": -1.0, "C": -1.0, "G": 2.0, "T": -1.0}],
+    )
+    low, high = pssm.score_range()          # must not raise
+    assert low < 0 < high
+    # Disfavored bases become strongly negative log-odds; the peaked base wins.
+    assert pssm.match_threshold(0.80) > pssm.match_threshold(0.0)
+    assert pssm.consensus == "CCG"
+
+
 def test_composite_penalises_reproducible_noise():
     balanced = {"replicate_agreement": 0.60, "motif_hit_rate": 0.40}
     noisy = {"replicate_agreement": 0.66, "motif_hit_rate": 0.20}

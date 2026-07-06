@@ -64,18 +64,28 @@ class MotifPWM:
     def log_odds(self) -> list[dict[str, float]]:
         """Per-position log2 odds: log2((freq + pseudo) / background).
 
-        The stored ``pwm`` holds per-position base frequencies. Converting to
-        log-odds gives a proper position weight matrix: conserved positions
-        contribute large scores, uninformative (flat) positions contribute ~0,
-        and bases rarer than background contribute negative scores.
+        The stored ``pwm`` normally holds per-position base frequencies.
+        Converting to log-odds gives a proper position weight matrix: conserved
+        positions contribute large scores, uninformative (flat) positions
+        contribute ~0, and bases rarer than background contribute negative
+        scores.
+
+        Some source databases (e.g. RBPmap ``*_PSSM`` matrices) ship as
+        log-odds/PSSM matrices with *negative* cell values. Normalizing those
+        by their row sum yields negative pseudo-frequencies, which would make
+        ``log2`` throw a ``math domain error``. We therefore clamp each cell to
+        be non-negative before smoothing — a no-op for genuine count/frequency
+        matrices (all ≥ 0) and a sane conversion for PSSMs (a disfavored base
+        maps to ~0 frequency, i.e. a strongly negative log-odds).
         """
         if self._log_odds_cache is None:
             log_odds: list[dict[str, float]] = []
             for pos in self.pwm:
-                total = sum(pos.get(b, 0.0) for b in NUC_ORDER) or 1.0
+                vals = {b: max(pos.get(b, 0.0), 0.0) for b in NUC_ORDER}
+                total = sum(vals.values()) or 1.0
                 row = {}
                 for base in NUC_ORDER:
-                    freq = (pos.get(base, 0.0) / total + PSEUDOCOUNT) / (1 + 4 * PSEUDOCOUNT)
+                    freq = (vals[base] / total + PSEUDOCOUNT) / (1 + 4 * PSEUDOCOUNT)
                     row[base] = math.log2(freq / BACKGROUND_FREQ)
                 log_odds.append(row)
             self._log_odds_cache = log_odds
