@@ -299,6 +299,15 @@ function bestByOptimizer(it: IterationRow[]) {
   return byOpt;
 }
 
+const CELL_LINES = ["K562", "HepG2"];
+function splitDataset(name: string): { rbp: string; cell: string | null } {
+  const parts = name.split("_");
+  const last = parts[parts.length - 1];
+  if (CELL_LINES.some((c) => c.toLowerCase() === last.toLowerCase()))
+    return { rbp: parts.slice(0, -1).join("_"), cell: last };
+  return { rbp: name, cell: null };
+}
+
 function Leaderboard({ experiments }: { experiments: Experiment[] }) {
   if (!experiments.length) {
     return (
@@ -308,38 +317,66 @@ function Leaderboard({ experiments }: { experiments: Experiment[] }) {
       </section>
     );
   }
-  const ranked = [...experiments].sort((a, b) => (b.best_composite ?? -1) - (a.best_composite ?? -1));
+
+  // Group datasets by RBP; rank groups (and rows within) by best composite.
+  const globalMax = Math.max(0.001, ...experiments.map((e) => e.best_composite ?? 0));
+  const byRbp = new Map<string, Experiment[]>();
+  for (const e of experiments) {
+    const { rbp } = splitDataset(e.name);
+    byRbp.set(rbp, [...(byRbp.get(rbp) ?? []), e]);
+  }
+  const groups = [...byRbp.entries()]
+    .map(([rbp, exps]) => ({
+      rbp,
+      exps: exps.sort((a, b) => (b.best_composite ?? -1) - (a.best_composite ?? -1)),
+      best: Math.max(...exps.map((e) => e.best_composite ?? -1)),
+    }))
+    .sort((a, b) => b.best - a.best);
+
   return (
     <section className="section">
-      <h2>🏆 Results — best per dataset</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>dataset</th><th>iters</th><th>LLM</th><th>Optuna</th>
-            <th>winner</th><th>best composite</th><th>trend</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ranked.map((g) => {
-            const byOpt = bestByOptimizer(g.iterations);
-            const hasBoth = byOpt.llm !== undefined && byOpt.optuna !== undefined;
-            const winner = hasBoth
-              ? byOpt.llm === byOpt.optuna ? "tie" : byOpt.llm > byOpt.optuna ? "llm" : "optuna"
-              : null;
-            return (
-              <tr key={g.name}>
-                <td><b>{g.name}</b></td>
-                <td>{g.n_iters}</td>
-                <td style={{ color: "var(--blue)" }}>{byOpt.llm !== undefined ? fmt(byOpt.llm) : "—"}</td>
-                <td style={{ color: "var(--yellow)" }}>{byOpt.optuna !== undefined ? fmt(byOpt.optuna) : "—"}</td>
-                <td>{winner ? <span className={`win ${winner}`}>{winner === "tie" ? "tie" : winner.toUpperCase()}</span> : "—"}</td>
-                <td><b style={{ color: "var(--green)" }}>{fmt(g.best_composite)}</b></td>
-                <td><Sparkline items={g.iterations} /></td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <h2>🏆 Results — best per dataset <span className="count">{experiments.length} datasets · ranked by composite</span></h2>
+      <div className="lb">
+        {groups.map((g) => (
+          <div className="lb-group" key={g.rbp}>
+            <div className="lb-rbp">
+              <span className="lb-rbp-name">{g.rbp}</span>
+              <span className="lb-rbp-best">{g.best >= 0 ? fmt(g.best, 3) : "—"}</span>
+            </div>
+            {g.exps.map((e) => {
+              const { cell } = splitDataset(e.name);
+              const byOpt = bestByOptimizer(e.iterations);
+              const hasBoth = byOpt.llm !== undefined && byOpt.optuna !== undefined;
+              const winner = hasBoth
+                ? byOpt.llm === byOpt.optuna ? "tie" : byOpt.llm > byOpt.optuna ? "llm" : "optuna"
+                : null;
+              const comp = e.best_composite ?? 0;
+              return (
+                <div className="lb-row" key={e.name}>
+                  <span className="lb-cell">{cell ?? e.name}</span>
+                  <span className="lb-bar-wrap">
+                    <span className="lb-bar" style={{ width: `${Math.max(3, (comp / globalMax) * 100)}%` }} />
+                    <span className="lb-comp">{fmt(e.best_composite, 3)}</span>
+                  </span>
+                  <span className="lb-opt">
+                    <b style={{ color: "var(--blue)" }}>{byOpt.llm !== undefined ? fmt(byOpt.llm, 3) : "—"}</b>
+                    <span className="lb-slash">/</span>
+                    <b style={{ color: "var(--yellow)" }}>{byOpt.optuna !== undefined ? fmt(byOpt.optuna, 3) : "—"}</b>
+                    {winner && <span className={`win ${winner} xs`}>{winner === "tie" ? "=" : winner.toUpperCase()}</span>}
+                  </span>
+                  <span className="lb-iters">{e.n_iters} it</span>
+                  <Sparkline items={e.iterations} />
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="lb-legend">
+        <span><i className="lb-swatch llm" /> LLM</span>
+        <span><i className="lb-swatch optuna" /> Optuna</span>
+        <span>bar = best composite (relative to top dataset {fmt(globalMax, 3)})</span>
+      </div>
     </section>
   );
 }

@@ -128,6 +128,37 @@ export function useStatus(intervalMs = 6000): PollState {
   return state;
 }
 
+export interface BindingSite {
+  chrom: string;
+  start: number;
+  end: number;
+  motif?: boolean;
+}
+
+export interface RunSites {
+  dataset: string;
+  found: boolean;
+  run_id?: string;
+  source?: string;
+  chrom?: string;
+  extent?: { start: number; end: number };
+  n_sites?: number | null;
+  composite?: number | null;
+  reproducibility?: number | null;
+  motif_hit_rate?: number | null;
+  motif_enrichment?: number | null;
+  recall?: number | null;
+  params?: Record<string, Record<string, unknown>>;
+  sites: BindingSite[];
+}
+
+/** Fetch binding-site coordinates for a dataset's best iteration. */
+export async function fetchRunSites(dataset: string): Promise<RunSites> {
+  const res = await fetch(`${API_BASE}/api/run_sites?dataset=${encodeURIComponent(dataset)}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as RunSites;
+}
+
 export const fmt = (v: number | null | undefined, d = 4) =>
   v === null || v === undefined ? "—" : Number(v).toFixed(d);
 export const fmtx = (v: number | null | undefined) =>
