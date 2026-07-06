@@ -51,6 +51,15 @@ Motifs are scored with **position weight matrices (PWMs)** from motif databases
 (mCrossBase, ATtRACT, CISBP-RNA, RBPDB, RBPmap, oRNAment) under `data/motifs/`,
 with the consensus strings above as IUPAC fallback.
 
+The benchmark has since grown to **~26 datasets** (see `pipeline/datasets.py`).
+The 20 added in 2026-07 are dominated by **splicing factors** (HNRNPK/M, SF3B1/4,
+SRSF1, SFPQ, U2AF1/2, RBM22, PCBP1, PUM2, PTBP1) — a harder class than the crisp
+preliminary trio above. ⚠️ For **positional binders** (U2AF1/2, SF3B1/4, RBM22)
+the auto-resolved "target motif" is a weak proxy (binding is defined by position
+at splice sites / branch point, not a k-mer); motif-aware scoring for them should
+be down-weighted or use a positional prior, else the motif term misleads. PUM2 is
+a near-free positive control (same UGUANAUA family as PUM1).
+
 ### Cell lines
 - **K562** — human chronic myelogenous leukemia (ENCODE tier-1).
 - **HepG2** — human hepatocellular carcinoma / liver (ENCODE tier-1).
@@ -109,13 +118,16 @@ is `DEFAULT_MIN_SITES` (10).
   `evaluate_config` (run PureCLIP + score → report); `decisions.py` = objective,
   prompt, decision validation/retry.
 - `pipeline/` — `configs.py` (search bounds, validation), `datasets.py` (dataset
-  registry + motif auto-resolution), `motifs.py` (TRANSFAC/PWM log-odds), `runner.py`.
+  registry + motif auto-resolution; table-driven `_standard_spec()` helper),
+  `motifs.py` (TRANSFAC/PWM log-odds), `runner.py`.
 - `workflow/` — `Snakefile` (merge IP → pureclip2 → per-replicate → postprocess →
   score) and `postprocess.py` (footprint standardization).
 - `scorers/run_scorers.py` — reproducibility, motif hit-rate + enrichment,
   benchmark recall; writes `score_report.json` (now self-describing: includes the
   params that produced it).
-- `scripts/` — `overnight_batch.py` (failure-tolerant batch runner),
+- `scripts/` — `overnight_batch.py` (failure-tolerant, wall-clock-budgeted batch
+  runner), `batch_runner.py` (simpler manifest runner: `--manifest`/`--parallel`,
+  one `agent.graph` subprocess per run, appends `results/batch/_summary.tsv`),
   `monitor.py` (dashboard backend + API + UI server), data download helpers.
 - `ui/` — React Router SPA (Dashboard, Runs, Plan run, Variables). Consumes the
   monitor API; served by `monitor.py` in production.
@@ -146,6 +158,10 @@ PYTHONPATH=. uv run python scripts/overnight_batch.py \
     --manifest config/bigrun2_jobs.yaml --hours 12 --no-repeat \
     --pureclip-dir /vol/storage1/johannes/projects
 
+# simple manifest batch (per-dataset preliminary runs; results/batch/_summary.tsv)
+PYTHONPATH=. uv run python scripts/batch_runner.py \
+    --manifest config/new_batch_runs.yaml --parallel 4
+
 # dashboard + API (serves the React build if ui/build/client exists)
 PYTHONPATH=. uv run python scripts/monitor.py --port 8888
 ```
@@ -167,16 +183,36 @@ changed + reasoning, from `decisions.jsonl`), **Plan run** (pick dataset, params
 
 ## 5. Compute VM & dashboard ops (`ssh bio`)
 
-- Host alias `bio`; project at `/vol/storage1/johannes/projects/agentic-pureclip`.
-- `pureclip2` is **not on the default PATH** — prepend `/vol/storage1/johannes/projects`.
-- Long jobs run in **tmux** sessions (`mon` = monitor, batch sessions per run);
-  launch detached via tmux, never a bare `&` over SSH (it hangs the channel).
+- Host alias `bio` → VM `agenticpureclipvm-751a3` (32 cores, 251 GB RAM). Project
+  at `/vol/storage1/johannes/projects/agentic-pureclip`.
+- The runner copy is **not a git checkout** (git commands fail there) — it's
+  deployed by copying files in. To ship a local fix, `scp` the file(s) directly,
+  e.g. `scp pipeline/motifs.py bio:/vol/storage1/johannes/projects/agentic-pureclip/pipeline/`.
+- **Non-interactive SSH does not source the interactive PATH.** A bare
+  `ssh bio '… uv run …'` fails with `uv: command not found`, then
+  `ModuleNotFoundError: pipeline`, then `pureclip2: command not found`. To launch
+  anything over SSH, export all three:
+
+  ```bash
+  ssh bio 'cd /vol/storage1/johannes/projects/agentic-pureclip; \
+    export PATH=/vol/storage1/johannes/projects:$HOME/.local/bin:$PATH; \
+    PYTHONPATH=. nohup uv run python scripts/batch_runner.py \
+      --manifest config/rerun_hnrnpk.yaml --parallel 2 \
+      > logs/rerun_hnrnpk.log 2>&1 &'
+  ```
+
+  `/vol/storage1/johannes/projects` → `pureclip2` (symlink to `pureclip` 2.0.4,
+  johan-stph fork); `$HOME/.local/bin` → `uv`; `PYTHONPATH=.` → the `pipeline`/
+  `agent` packages. Prefer **tmux** for anything long-lived (a bare `&` over a
+  non-detached SSH channel can hang it); `nohup … &` with a redirect works for
+  fire-and-forget.
 - View the dashboard locally: `ssh -f -N -L 8888:localhost:8888 bio` then
   http://localhost:8888. If the page is stale, the tunnel often died — kill and
-  re-establish it.
-- The analysis database accumulates in `results/overnight/`:
-  `iterations.jsonl` (per-iteration metrics + params), `jobs.jsonl` (per-job
-  status/timing/failure hints), `summary.csv`, and `<job_id>/decisions.jsonl`.
+  re-establish it. `scripts/monitor.py --port 8888` is the backend.
+- Result stores (all gitignored, runner-only): `results/batch/` (from
+  `batch_runner.py`: per-run `<id>_<ts>/` dirs with `decisions.jsonl` +
+  per-iteration `score_report.json`, plus `_summary.tsv`) and `results/overnight/`
+  (`iterations.jsonl`, `jobs.jsonl`, `summary.csv`, `<job_id>/decisions.jsonl`).
 
 ---
 
@@ -195,6 +231,17 @@ changed + reasoning, from `decisions.jsonl`), **Plan run** (pick dataset, params
   rather than crashing.
 - `score_report.json` and the decision trail are the durable per-run records;
   the shared agent log is not a reliable per-run source.
+- **PWM loading assumes frequency/count matrices, but some databases ship
+  log-odds.** RBPmap `*_PSSM` matrices contain *negative* cells; normalizing them
+  by their row sum yields negative pseudo-frequencies, and
+  `MotifPWM.log_odds` would raise `math domain error` on `log2(≤0)`. It now clamps
+  each cell to ≥0 first (no-op for real frequency matrices; disfavored PSSM bases
+  map to ~0 → strongly negative log-odds). This is what crashed HNRNPK scoring in
+  the 2026-07 batch. When adding motif sources, watch for negative-valued matrices.
+- `batch_runner.py` reads a run's score by grepping the agent output for
+  `Best composite score=` (what `agent.graph` logs on `DONE`). If that log line
+  changes, `_summary.tsv` silently records `best_score=None` even though the real
+  score is in each run's `decisions.jsonl`.
 
 ## 7. Current focus / open threads
 
