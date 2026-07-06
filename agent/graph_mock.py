@@ -37,12 +37,16 @@ SCORE_MODE = os.environ.get("MOCK_SCORE_MODE", "plateau")
 CONFIG_PATH = "config/run_config.yaml"
 REPORT_PATH = "results/score_report.json"
 
-if USE_GEMINI and ChatOpenAI is not None:
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
+# Only build the client when a key is present so importing this module never
+# crashes in keyless environments (e.g. CI). Without a key llm stays None and
+# agent_decide falls back to the offline mock stub (USE_GEMINI=0 path).
+if USE_GEMINI and ChatOpenAI is not None and DEEPSEEK_API_KEY:
     llm = ChatOpenAI(
         model="deepseek-chat",
         temperature=0.2,
         base_url="https://api.deepseek.com/v1",
-        api_key=os.environ.get("DEEPSEEK_API_KEY", ""),
+        api_key=DEEPSEEK_API_KEY,
     )
 else:
     llm = None
@@ -122,7 +126,10 @@ def agent_decide(state: AgentState) -> dict:
 
     if USE_GEMINI:
         if llm is None:
-            raise RuntimeError("USE_GEMINI=1 but langchain_openai is not installed")
+            raise RuntimeError(
+                "USE_GEMINI=1 but no LLM client is configured "
+                "(set DEEPSEEK_API_KEY, or set USE_GEMINI=0 for the offline stub)"
+            )
         prompt = f"""You are optimising PureCLIP parameters for eCLIP data.
 
 PRIOR KNOWLEDGE:
