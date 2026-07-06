@@ -57,9 +57,7 @@ rule pureclip:
     input:
         bam=MERGED_BAM,
         bai=MERGED_BAI,
-        genome=config["reference"]["genome_fasta"],
-        input_bam=config["samples"]["input_control"]["rep1"]["bam"] if config["pureclip"]["use_input_covariate"] else [],
-        input_bai=config["samples"]["input_control"]["rep1"]["bam"] + ".bai" if config["pureclip"]["use_input_covariate"] else []
+        genome=config["reference"]["genome_fasta"]
     output:
         sites=MERGED_SITES,
         regions=MERGED_REGIONS
@@ -67,24 +65,22 @@ rule pureclip:
         bw=config["pureclip"]["bandwidth_nt"],
         dm=config["pureclip"]["merge_distance_nt"],
         ld="-ld" if config["pureclip"]["high_precision_mode"] else "",
-        ibam=(f"-ibam {config['samples']['input_control']['rep1']['bam']} "
-              f"-ibai {config['samples']['input_control']['rep1']['bam']}.bai"
-              if config["pureclip"]["use_input_covariate"] else "")
+        iv="-iv chr21 -chr chr21" if config["pureclip"].get("learn_on_chr21") else ""
     threads: config["resources"]["threads"]
     log:
         f"{RESULTS_DIR}/logs/pureclip_merged.log"
     shell:
         """
-        echo "[pureclip merged] bw={params.bw} dm={params.dm} ld='{params.ld}'" > {log}
-        pureclip \
+        echo "[pureclip2 merged] bw={params.bw} dm={params.dm} ld='{params.ld}' iv='{params.iv}'" > {log}
+        pureclip2 \
             -i {input.bam} \
-            -bai {input.bam}.bai \
+            -bai {input.bai} \
             -g {input.genome} \
             -nt {threads} \
             -bw {params.bw} \
             -dm {params.dm} \
             {params.ld} \
-            {params.ibam} \
+            {params.iv} \
             -o {output.sites} \
             -or {output.regions} >> {log} 2>&1
         """
@@ -94,9 +90,7 @@ rule pureclip_per_replicate:
     input:
         bam=lambda wildcards: config["samples"]["ip"][wildcards.rep]["bam"],
         bai=lambda wildcards: config["samples"]["ip"][wildcards.rep]["bam"] + ".bai",
-        genome=config["reference"]["genome_fasta"],
-        input_bam=config["samples"]["input_control"]["rep1"]["bam"] if config["pureclip"]["use_input_covariate"] else [],
-        input_bai=config["samples"]["input_control"]["rep1"]["bam"] + ".bai" if config["pureclip"]["use_input_covariate"] else []
+        genome=config["reference"]["genome_fasta"]
     output:
         sites=f"{RESULTS_DIR}/ip_{{rep}}/pureclip_sites.bed",
         regions=f"{RESULTS_DIR}/ip_{{rep}}/pureclip_regions.bed"
@@ -104,16 +98,14 @@ rule pureclip_per_replicate:
         bw=config["pureclip"]["bandwidth_nt"],
         dm=config["pureclip"]["merge_distance_nt"],
         ld="-ld" if config["pureclip"]["high_precision_mode"] else "",
-        ibam=(f"-ibam {config['samples']['input_control']['rep1']['bam']} "
-              f"-ibai {config['samples']['input_control']['rep1']['bam']}.bai"
-              if config["pureclip"]["use_input_covariate"] else "")
+        iv="-iv chr21 -chr chr21" if config["pureclip"].get("learn_on_chr21") else ""
     threads: config["resources"]["threads"]
     log:
         f"{RESULTS_DIR}/ip_{{rep}}/logs/pureclip.log"
     shell:
         """
-        echo "[pureclip per-rep] rep={wildcards.rep} bw={params.bw} dm={params.dm}" > {log}
-        pureclip \
+        echo "[pureclip2 per-rep] rep={wildcards.rep} bw={params.bw} dm={params.dm} iv='{params.iv}'" > {log}
+        pureclip2 \
             -i {input.bam} \
             -bai {input.bai} \
             -g {input.genome} \
@@ -121,7 +113,7 @@ rule pureclip_per_replicate:
             -bw {params.bw} \
             -dm {params.dm} \
             {params.ld} \
-            {params.ibam} \
+            {params.iv} \
             -o {output.sites} \
             -or {output.regions} >> {log} 2>&1
         """

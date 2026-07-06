@@ -1,0 +1,49 @@
+# Batch run manifest
+# Define runs to execute. Each run gets its own results subdirectory.
+# The agent optimizes PureCLIP params for each dataset independently.
+
+runs:
+  # ── Quick chr21 tests (observe agent behavior) ─────────────────────
+  - id: quick_rbfox2_k562
+    dataset: RBFOX2_K562
+    chr21_only: true
+    max_iter: 4
+    threads: 32
+
+  - id: quick_qki_k562
+    dataset: QKI_K562
+    chr21_only: true
+    max_iter: 4
+    threads: 32
+
+  - id: quick_pum1_k562
+    dataset: PUM1_K562
+    chr21_only: true
+    max_iter: 4
+    threads: 32
+
+  # ── Full chr21 runs (more iterations, observe convergence) ────────
+  - id: full_rbfox2_k562
+    dataset: RBFOX2_K562
+    chr21_only: true
+    max_iter: 10
+    threads: 32
+
+  - id: full_qki_k562
+    dataset: QKI_K562
+    chr21_only: true
+    max_iter: 10
+    threads: 32
+
+  # ── Cross-cell-line comparison (same RBP, different cell) ─────────
+  - id: full_rbfox2_hepg2
+    dataset: RBFOX2_HepG2
+    chr21_only: true
+    max_iter: 10
+    threads: 32
+
+  - id: full_qki_hepg2
+    dataset: QKI_HepG2
+    chr21_only: true
+    max_iter: 10
+    threads: 32

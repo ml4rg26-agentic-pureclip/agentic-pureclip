@@ -1,16 +1,25 @@
 import copy
 import json
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langgraph.graph import END, START, StateGraph
 
-from agent.decisions import build_decision_prompt, parse_decision_response, validated_next_config
+from agent.decisions import (
+    DEFAULT_OBJECTIVE_WEIGHTS,
+    build_decision_prompt,
+    composite_objective,
+    parse_decision_response,
+    validated_next_config,
+)
+from agent.evaluation import FORCE_RULES
 from agent.logging_config import setup_logger
 from agent.state import AgentState, IterationRecord
 from pipeline.configs import (
     DEFAULT_SEARCH_BOUNDS,
+    ConfigValidationError,
     load_config,
     save_config,
     score_report_path,
@@ -25,9 +34,18 @@ load_dotenv()
 
 logger = setup_logger("agent_graph", "results/logs/agent_graph.log")
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", temperature=0.2)
+llm = ChatOpenAI(
+    model="deepseek-chat",
+    temperature=0.2,
+    base_url="https://api.deepseek.com/v1",
+    api_key=os.environ.get("DEEPSEEK_API_KEY", ""),
+)
 
 CONFIG_PATH = os.environ.get("CONFIG_PATH", "config/run_config.yaml")
+
+# How many times to re-prompt the LLM when it proposes a repeated/out-of-bounds
+# parameter set before giving up and converging gracefully.
+MAX_DECISION_RETRIES = 3
 
 
 def _with_iteration_output(config: dict) -> dict:
@@ -48,7 +66,7 @@ def run_pipeline(state: AgentState) -> dict:
     run_snakemake(
         CONFIG_PATH,
         jobs=state["current_config"]["resources"]["threads"],
-        force_rules=("pureclip", "pureclip_per_replicate", "postprocess"),
+        force_rules=FORCE_RULES,
     )
     return {}
 
@@ -59,61 +77,111 @@ def run_scorers(state: AgentState) -> dict:
     return {}
 
 
+def _propose_next_config(state: AgentState, report: dict, weights: dict):
+    """Ask the LLM for a novel, valid next config.
+
+    The search space is small and the LLM may repeat a tried parameter set or
+    stray out of bounds. Rather than crashing the whole run, retry with the
+    rejection reason fed back into the prompt. Returns ``(decision, new_config)``;
+    ``new_config`` is ``None`` if no novel valid set was found.
+    """
+    feedback = None
+    decision = None
+    for attempt in range(1, MAX_DECISION_RETRIES + 1):
+        resp = llm.invoke(build_decision_prompt(state, report, weights, feedback))
+        try:
+            decision = parse_decision_response(resp.content)
+        except (json.JSONDecodeError, ValueError) as exc:
+            feedback = f"The response was not valid JSON ({exc}). Respond with ONLY the JSON object."
+            logger.warning("Decision parse failed (attempt %d/%d): %s", attempt, MAX_DECISION_RETRIES, exc)
+            continue
+        try:
+            return decision, validated_next_config(state, decision)
+        except ConfigValidationError as exc:
+            feedback = (
+                f"{exc}. The new parameter set must differ from every set already tried "
+                "and stay within the search bounds. Change a different parameter, "
+                "or change it by a different amount."
+            )
+            logger.warning("Decision rejected (attempt %d/%d): %s", attempt, MAX_DECISION_RETRIES, exc)
+    return decision, None
+
+
+def _record_decision(state: AgentState, report: dict, objective: float, decision: dict | None) -> None:
+    """Append this iteration's params, scores and reasoning to the run's decision trail."""
+    results_root = (state["current_config"].get("output") or {}).get("results_root")
+    if not results_root:
+        return
+    entry = {
+        "iteration": state["current_iteration"],
+        "optimizer": "llm",
+        "run_id": state["current_config"].get("run_id"),
+        "params": tunable_snapshot(state["current_config"]),
+        "scores": {
+            k: report.get(k)
+            for k in ("reproducibility_score", "replicate_agreement", "motif_hit_rate",
+                      "benchmark_region_recall", "n_binding_sites")
+        },
+        "composite": round(objective, 4),
+        "reasoning": decision.get("reasoning") if decision else None,
+        "changes": decision.get("changes") if decision else None,
+    }
+    try:
+        path = Path(results_root) / "decisions.jsonl"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(entry) + "\n")
+    except OSError:
+        logger.warning("Could not write decision trail to %s", results_root)
+
+
 def agent_decide(state: AgentState) -> dict:
     logger.info("Agent is deciding on next config")
     with open(score_report_path(state["current_config"]), "r", encoding="utf-8") as handle:
         report = json.load(handle)
-    objective = report.get(state["objective_metric"]) or 0.0
-
-    results_root = state["current_config"].get("output", {}).get("results_root", "results")
-    dataset_name = os.path.splitext(os.path.basename(CONFIG_PATH))[0]
-    history_path = os.path.join(results_root, f"{dataset_name}_history.jsonl")
-    os.makedirs(results_root, exist_ok=True)
-    with open(history_path, "a", encoding="utf-8") as f:
-        json.dump({
-            "iteration": state["current_iteration"],
-            "config": tunable_snapshot(state["current_config"]),
-            "scores": report,
-            "objective_metric": state["objective_metric"]
-        }, f)
-        f.write("\n")
-
-    resp = llm.invoke(build_decision_prompt(state, report))
-    try:
-        decision = parse_decision_response(resp.content)
-    except (json.JSONDecodeError, ValueError):
-        logger.error("Failed to parse LLM response as JSON. Raw response:\n%s", resp.content)
-        raise
-
-    logger.info("Agent decision reasoning: %s", decision["reasoning"])
-
-    try:
-        new_config = validated_next_config(state, decision)
-    except Exception as e:
-        if type(e).__name__ == "ConfigValidationError":
-            logger.warning("Agent proposed a duplicate configuration. Terminating early to save progress.")
-            return {"termination_reason": f"Duplicate proposal: {e}"}
-        raise
-
-    cell_line = state["current_config"].get("cell_line")
-    if not cell_line:
-        logger.warning("cell_line not found in current_config, using 'UNKNOWN_CELL' for run_id")
-        cell_line = "UNKNOWN_CELL"
-
-    new_config["run_id"] = f"{state['priors']['target_protein']}_{cell_line}_iter_{state['current_iteration'] + 1:02d}"
-    new_config = _with_iteration_output(new_config)
+    weights = state["priors"].get("objective_weights") or DEFAULT_OBJECTIVE_WEIGHTS
+    objective = composite_objective(report, weights)
+    logger.info(
+        "Scores: reproducibility=%s motif=%s recall=%s composite=%.4f (best so far=%.4f)",
+        report.get("reproducibility_score", report.get("replicate_agreement")),
+        report.get("motif_hit_rate"),
+        report.get("benchmark_region_recall"),
+        objective,
+        state["best_score"],
+    )
 
     improved = objective > state["best_score"] + state["score_improvement_threshold"]
     best_score = objective if improved else state["best_score"]
     best_config = state["current_config"] if improved else state["best_config"]
-    streak = 0 if improved else state["no_improvement_streak"] + 1
+
+    decision, new_config = _propose_next_config(state, report, weights)
+    _record_decision(state, report, objective, decision)
 
     record: IterationRecord = {
         "iteration": state["current_iteration"],
         "config": tunable_snapshot(state["current_config"]),
         "scores": report,
-        "reasoning": decision["reasoning"],
+        "reasoning": decision["reasoning"] if decision else "No valid novel parameter set could be proposed.",
     }
+
+    if new_config is None:
+        # Search exhausted: stop gracefully instead of crashing the run.
+        logger.warning(
+            "No novel valid parameter set after %d attempts; converging.", MAX_DECISION_RETRIES
+        )
+        return {
+            "current_config": state["current_config"],
+            "current_iteration": state["current_iteration"] + 1,
+            "history": [record],
+            "best_score": best_score,
+            "best_config": best_config,
+            "no_improvement_streak": state["patience"],  # trip the convergence stop
+        }
+
+    logger.info("Agent decision reasoning: %s", decision["reasoning"])
+    new_config["run_id"] = f"{state['priors']['target_protein']}_iter_{state['current_iteration'] + 1:02d}"
+    new_config = _with_iteration_output(new_config)
+    streak = 0 if improved else state["no_improvement_streak"] + 1
 
     return {
         "current_config": new_config,
@@ -147,16 +215,7 @@ def finalize(state: AgentState) -> dict:
             else "Converged: no improvement"
         )
     save_config(state["best_config"], "config/best_config.yaml")
-    logger.info("DONE. %s. Best %s=%.4f", reason, state["objective_metric"], state["best_score"])
-
-    # Automatically generate the final report
-    import subprocess
-    dataset_name = os.path.splitext(os.path.basename(CONFIG_PATH))[0]
-    results_root = state["current_config"].get("output", {}).get("results_root", "results")
-    pdf_path = os.path.join(results_root, f"{dataset_name}_report.pdf")
-    logger.info("Generating final PDF report at %s", pdf_path)
-    subprocess.run(["python", "agent/report.py", CONFIG_PATH, pdf_path], check=False)
-
+    logger.info("DONE. %s. Best composite score=%.4f", reason, state["best_score"])
     return {"termination_reason": reason}
 
 
@@ -206,7 +265,7 @@ if __name__ == "__main__":
     initial_state: AgentState = {
         "priors": priors,
         "objective_metric": priors.get("primary_objective_metric", "replicate_agreement"),
-        "search_bounds": DEFAULT_SEARCH_BOUNDS,
+        "search_bounds": base_config.get("search_bounds") or DEFAULT_SEARCH_BOUNDS,
         "current_config": base_config,
         "current_iteration": 0,
         "history": [],

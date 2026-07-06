@@ -7,43 +7,144 @@ from typing import Any
 from pipeline.configs import apply_decision_changes, tunable_signature, tunable_snapshot, tried_signatures
 
 
-def build_decision_prompt(state: dict[str, Any], report: dict[str, Any]) -> str:
-    priors = state["current_config"].get("priors") or state["priors"]
-    history = [
-        {
+# Weights for the blended objective. Renormalised over whichever terms a score
+# report actually contains. Override per-dataset via priors["objective_weights"].
+DEFAULT_OBJECTIVE_WEIGHTS = {"reproducibility": 0.5, "motif": 0.25, "recall": 0.25}
+
+# Backwards-compatible alias (older callers imported this).
+DEFAULT_MOTIF_WEIGHT = DEFAULT_OBJECTIVE_WEIGHTS["motif"]
+
+# Collapse guard: with only a handful of binding sites, reproducibility and motif
+# rate trivially saturate at 1.0 — a degenerate "win". Below this soft floor the
+# composite is ramped down linearly so a 1-site solution scores ~0.
+DEFAULT_MIN_SITES = 10
+
+
+def _objective_terms(report: dict[str, Any]) -> dict[str, float]:
+    """Extract the [0, 1] objective terms present in a score report."""
+    terms: dict[str, float] = {}
+    rep = report.get("reproducibility_score")
+    if rep is None:  # fall back to raw agreement for old reports / no genome index
+        rep = report.get("replicate_agreement")
+    if rep is not None:
+        terms["reproducibility"] = float(rep)
+    motif = report.get("motif_hit_rate")
+    if motif is not None:
+        terms["motif"] = float(motif)
+    recall = report.get("benchmark_region_recall")
+    if recall is not None:
+        terms["recall"] = float(recall)
+    return terms
+
+
+def yield_factor(report: dict[str, Any], min_sites: int = DEFAULT_MIN_SITES) -> float:
+    """Down-weight scores from too few sites (the collapse failure mode).
+
+    1.0 at/above ``min_sites``, ramping linearly to 0 at zero sites.
+    """
+    n = report.get("n_binding_sites")
+    if n is None or min_sites <= 0:
+        return 1.0
+    return min(1.0, max(0, n) / min_sites)
+
+
+def composite_objective(
+    report: dict[str, Any],
+    weights: dict[str, float] | None = None,
+    min_sites: int = DEFAULT_MIN_SITES,
+) -> float:
+    """Blended quality score the agent climbs (all terms in [0, 1]):
+
+      * reproducibility — chance-corrected replicate agreement (falls back to the
+        raw agreement when the chance-corrected score is unavailable)
+      * motif           — fraction of sites carrying the expected RNA motif
+      * recall          — fraction of known-strong ENCODE reference regions recovered
+
+    Weights are renormalised over whichever terms are present. The result is then
+    multiplied by a yield factor so collapsing to a handful of sites (where
+    reproducibility/motif trivially hit 1.0) can no longer win.
+    """
+    weights = weights or DEFAULT_OBJECTIVE_WEIGHTS
+    terms = _objective_terms(report)
+    if not terms:
+        return 0.0
+    total_w = sum(weights.get(k, 0.0) for k in terms)
+    if total_w <= 0:
+        return 0.0
+    base = sum(weights.get(k, 0.0) * v for k, v in terms.items()) / total_w
+    return float(base * yield_factor(report, min_sites))
+
+
+def _delta(curr: float | None, prev: float | None) -> str:
+    if curr is None or prev is None:
+        return "n/a"
+    return f"{curr - prev:+.4f}"
+
+
+def _progress_rows(state: dict[str, Any], weights: dict[str, float]) -> list[dict[str, Any]]:
+    """Compact per-iteration trend, with deltas vs the previous attempt."""
+    rows = []
+    prev = None
+    for h in state["history"]:
+        scores = h["scores"]
+        reproducibility = scores.get("reproducibility_score")
+        if reproducibility is None:
+            reproducibility = scores.get("replicate_agreement")
+        row = {
             "iter": h["iteration"],
             "params": h["config"],
-            "agreement": h["scores"].get("replicate_agreement"),
-            "n_sites": h["scores"].get("n_binding_sites"),
-            "motif_hit_rate": h["scores"].get("motif_hit_rate"),
+            "reproducibility": reproducibility,
+            "agreement_raw": scores.get("replicate_agreement"),
+            "motif_hit_rate": scores.get("motif_hit_rate"),
+            "known_site_recall": scores.get("benchmark_region_recall"),
+            "n_sites": scores.get("n_binding_sites"),
+            "composite": round(composite_objective(scores, weights), 4),
         }
-        for h in state["history"]
-    ]
-    return f"""You are optimising PureCLIP parameters for eCLIP data.
+        if prev is not None:
+            row["d_reproducibility"] = _delta(row["reproducibility"], prev["reproducibility"])
+            row["d_recall"] = _delta(row["known_site_recall"], prev["known_site_recall"])
+            row["d_composite"] = _delta(row["composite"], prev["composite"])
+        rows.append(row)
+        prev = row
+    return rows
 
-Your goal is to MAXIMISE {state['objective_metric']} without collapsing the number of binding sites.
-THE PIPELINE HAS TWO STAGES, and the parameters you control belong to each:
 
-  Stage 1 - PureCLIP (peak calling):
-    Runs an HMM on the BAM data to detect crosslink sites and merge them into
-    raw binding regions. Parameters under "pureclip" change how these raw
-    regions are called:
-      - bandwidth_nt: KDE smoothing. Smaller = sensitive to sharp local spikes
-        (narrower peaks); larger = smoother signal, merges adjacent peaks,
-        reduces background but can blur closely spaced sites.
-      - merge_distance_nt: max gap between crosslink sites that still get merged
-        into one continuous region. Higher = broader regions; lower = more
-        fragmented regions.
+def build_decision_prompt(
+    state: dict[str, Any],
+    report: dict[str, Any],
+    weights: dict[str, float] | None = None,
+    feedback: str | None = None,
+) -> str:
+    weights = weights or DEFAULT_OBJECTIVE_WEIGHTS
+    priors = state["current_config"].get("priors") or state["priors"]
+    progress = _progress_rows(state, weights)
+    current_composite = round(composite_objective(report, weights), 4)
+    weights_str = ", ".join(f"{k}={v}" for k, v in weights.items())
+    feedback_block = (
+        f"\nIMPORTANT — your previous answer was rejected:\n{feedback}\n"
+        "Propose a DIFFERENT change that fixes this.\n"
+        if feedback
+        else ""
+    )
+    return f"""You are optimising PureCLIP parameters for eCLIP data.{feedback_block}
 
-  Stage 2 - Postprocessing (filtering and reshaping PureCLIP's output):
-    Takes the raw regions from Stage 1 and turns them into final binding sites.
-    Parameters under "postprocessing" act ONLY on Stage 1's output:
-      - min_crosslink_events: drop regions with fewer than this many crosslink
-        events (noise filter; higher = stricter, fewer final sites).
-      - min_region_length_nt: drop regions shorter than this.
-      - force_width: re-centre each surviving region on its MIDPOINT
-        (the geometric centre between start and end, NOT a signal summit)
-        and force it to this fixed width.
+Your goal is to MAXIMISE the COMPOSITE quality score, a weighted blend (weights
+renormalised over the terms present; current weights: {weights_str}) of three
+metrics, all in [0, 1]:
+  * reproducibility    — replicate agreement corrected for chance overlap. Unlike
+    raw agreement this CANNOT be inflated by keeping only a few broad sites.
+  * motif_hit_rate     — fraction of sites carrying the expected RNA motif
+    (biological validity).
+  * known_site_recall  — fraction of known-strong ENCODE reference regions your
+    sites recover. Collapsing the number of sites LOWERS this term.
+
+Because recall punishes site collapse and reproducibility is chance-corrected,
+trimming sites to chase agreement no longer helps — you must find sites that are
+reproducible, motif-bearing AND cover the known binding regions.
+
+COLLAPSE GUARD: the composite is multiplied by min(1, n_binding_sites/{DEFAULT_MIN_SITES}).
+Below {DEFAULT_MIN_SITES} sites the score is ramped toward zero, so a handful of
+"perfect" sites is NOT a win. Keep a healthy number of binding sites.
 
 PRIOR KNOWLEDGE:
 {json.dumps(priors, indent=2)}
@@ -54,26 +155,26 @@ SEARCH BOUNDS (hard limits, never exceed these):
 CURRENT TUNABLE PARAMETERS:
 {json.dumps(tunable_snapshot(state['current_config']), indent=2)}
 
-LATEST SCORE:
+LATEST SCORE (composite={current_composite}):
 {json.dumps(report, indent=2)}
 
-FULL HISTORY OF PREVIOUS ATTEMPTS:
-{json.dumps(history, indent=2)}
+PROGRESS (oldest first; d_* are deltas vs the previous attempt):
+{json.dumps(progress, indent=2)}
 
 DECISION RULES:
-1. Use observed score trends, not a fixed assumption that relaxing or
-   tightening always helps.
-2. You may change multiple parameters at once when you have a reason to expect
-   them to interact, but keep the number of simultaneous changes small (at most
-   2-3). For every parameter you change, state in your reasoning what you expect
-   it to do and why. Changing many parameters blindly makes the result
-   impossible to attribute to any single cause.
+1. Read the deltas: keep moving parameters in directions that raised composite,
+   reverse directions that lowered it. Do not assume relaxing or tightening always helps.
+2. Change ONE parameter at a time so the effect is interpretable.
 3. Do not repeat any previous parameter set.
-4. Stay inside the search bounds exactly.
+4. Stay strictly inside the search bounds.
 5. Only change parameters listed in SEARCH BOUNDS.
+6. If reproducibility rose but known_site_recall or motif_hit_rate fell, you are
+   likely discarding real sites — prefer reverting or trying a different parameter.
+7. If n_sites is collapsing and recall is dropping, relax stringency (lower
+   min_crosslink_events, raise merge_distance_nt) to recover sensitivity.
 
 Respond ONLY with JSON:
-{{"reasoning": "state the trend you observed and why you chose this direction",
+{{"reasoning": "name the trend you saw in the deltas and why you chose this direction",
   "changes": {{"pureclip": {{...}}, "postprocessing": {{...}}}}}}"""
 
 

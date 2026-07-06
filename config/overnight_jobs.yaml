@@ -1,0 +1,28 @@
+# Job manifest for scripts/overnight_batch.py — a long, failure-tolerant batch
+# meant to run ~8h unattended and leave a clean database to analyze afterwards.
+#
+# `defaults` apply to every job; each job may override any of them.
+# Per-job overrides: dataset, max_iter, threads, learn_on_chr21,
+#                    pureclip:{...}, postprocessing:{...}, objective_weights:{...}
+
+defaults:
+  max_iter: 6
+  threads: 32
+  learn_on_chr21: true            # chr21 fast mode so jobs fit the time budget
+  per_job_timeout_min: 150        # hard cap per job; a stuck job can't eat the night
+  objective_weights:
+    reproducibility: 0.5
+    motif: 0.25
+    recall: 0.25
+
+jobs:
+  - {id: rbfox2_k562,  dataset: RBFOX2_K562}
+  - {id: qki_k562,     dataset: QKI_K562}
+  - {id: pum1_k562,    dataset: PUM1_K562}
+  - {id: rbfox2_hepg2, dataset: RBFOX2_HepG2}
+  - {id: qki_hepg2,    dataset: QKI_HepG2}
+  # diversify the database with different starting points / weightings
+  - {id: rbfox2_k562_widebw,  dataset: RBFOX2_K562, pureclip: {bandwidth_nt: 90}}
+  - {id: pum1_k562_relaxed,   dataset: PUM1_K562,   postprocessing: {min_crosslink_events: 2}}
+  - {id: qki_k562_recallheavy, dataset: QKI_K562,
+     objective_weights: {reproducibility: 0.34, motif: 0.33, recall: 0.33}}

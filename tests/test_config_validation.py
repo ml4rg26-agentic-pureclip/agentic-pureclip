@@ -32,11 +32,21 @@ def test_decision_rejects_out_of_bounds_value():
         )
 
 
-def test_decision_rejects_unsupported_parameter():
+def test_decision_rejects_unsupported_section():
     cfg = load_config("config/run_config.yaml")
     with pytest.raises(ConfigValidationError):
         apply_decision_changes(
             cfg,
-            {"pureclip": {"high_precision_mode": True}},
+            {"reference": {"genome_fasta": 1}},
+            search_bounds=DEFAULT_SEARCH_BOUNDS,
+        )
+
+
+def test_decision_rejects_non_numeric_value():
+    cfg = load_config("config/run_config.yaml")
+    with pytest.raises(ConfigValidationError):
+        apply_decision_changes(
+            cfg,
+            {"pureclip": {"bandwidth_nt": "wide"}},
             search_bounds=DEFAULT_SEARCH_BOUNDS,
         )

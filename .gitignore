@@ -42,3 +42,6 @@ ref/
 results/
 results_mock/
 docs/
+
+# UI-scheduled run manifests (generated)
+config/ui_runs/

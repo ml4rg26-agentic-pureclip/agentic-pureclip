@@ -6,12 +6,12 @@ clip_protocol: eCLIP
 samples:
   ip:
     rep1:
-      bam: data/RBFOX2_HepG2/RBFOX2_HepG2/bam/ip_rep1_v1/ENCFF239CML.bam
+      bam: data/RBFOX2_HepG2/bam/ip_rep1_v1/ENCFF239CML.bam
     rep2:
-      bam: data/RBFOX2_HepG2/RBFOX2_HepG2/bam/ip_rep2_v1/ENCFF170YQV.bam
+      bam: data/RBFOX2_HepG2/bam/ip_rep2_v1/ENCFF170YQV.bam
   input_control:
     rep1:
-      bam: data/RBFOX2_HepG2/RBFOX2_HepG2/bam/smi_v1/ENCFF515BTB.bam
+      bam: data/RBFOX2_HepG2/bam/smi_v1/ENCFF515BTB.bam
 reference:
   genome_fasta: data/GRCh38.primary_assembly.genome.fa/GRCh38.primary_assembly.genome.fa
   annotation_gtf: null
@@ -40,11 +40,11 @@ reproducibility:
   min_crosslink_events_floor: 2
   min_replicates_passing: 2
 benchmark:
-  top_regions_bed: data/RBFOX2_HepG2/RBFOX2_HepG2/top_regions/regions.bed6
-  top_crosslinks_bed: data/RBFOX2_HepG2/RBFOX2_HepG2/top_crosslink_sites/crosslinks.bed6
-  top_genes: data/RBFOX2_HepG2/RBFOX2_HepG2/top_genes/list.txt
-  biotypes_tsv: data/RBFOX2_HepG2/RBFOX2_HepG2/biotypes_genetypes/biotypes_proportions.tsv
-  genotypes_tsv: data/RBFOX2_HepG2/RBFOX2_HepG2/biotypes_genetypes/genetypes_proportions.tsv
+  top_regions_bed: data/RBFOX2_HepG2/top_regions/regions.bed6
+  top_crosslinks_bed: data/RBFOX2_HepG2/top_crosslink_sites/crosslinks.bed6
+  top_genes: data/RBFOX2_HepG2/top_genes/list.txt
+  biotypes_tsv: data/RBFOX2_HepG2/biotypes_genetypes/biotypes_proportions.tsv
+  genotypes_tsv: data/RBFOX2_HepG2/biotypes_genetypes/genetypes_proportions.tsv
 resources:
   max_memory_gb: 16
   threads: 8

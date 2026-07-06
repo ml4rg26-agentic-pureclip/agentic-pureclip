@@ -1,0 +1,29 @@
+# ~12-hour batch: all 5 datasets × both optimizers (LLM + Optuna), full search.
+# Ordered cheap→expensive so broad coverage lands first; the 12h deadline +
+# graceful partial-recording handle any overrun (RBFOX2_HepG2 is last as it
+# already performs well). Optuna gets a few more trials (it benefits from budget).
+#
+#   PYTHONPATH=. uv run python scripts/overnight_batch.py \
+#       --manifest config/overnight12_jobs.yaml --hours 12 --no-repeat \
+#       --pureclip-dir /vol/storage1/johannes/projects
+
+defaults:
+  threads: 32
+  learn_on_chr21: true
+  per_job_timeout_min: 240
+  objective_weights:
+    reproducibility: 0.5
+    motif: 0.25
+    recall: 0.25
+
+jobs:
+  - {id: pum1_k562_llm,       dataset: PUM1_K562,    optimizer: llm,    max_iter: 12}
+  - {id: pum1_k562_optuna,    dataset: PUM1_K562,    optimizer: optuna, max_iter: 15}
+  - {id: qki_k562_llm,        dataset: QKI_K562,     optimizer: llm,    max_iter: 12}
+  - {id: qki_k562_optuna,     dataset: QKI_K562,     optimizer: optuna, max_iter: 15}
+  - {id: qki_hepg2_llm,       dataset: QKI_HepG2,    optimizer: llm,    max_iter: 10}
+  - {id: qki_hepg2_optuna,    dataset: QKI_HepG2,    optimizer: optuna, max_iter: 12}
+  - {id: rbfox2_k562_llm,     dataset: RBFOX2_K562,  optimizer: llm,    max_iter: 10}
+  - {id: rbfox2_k562_optuna,  dataset: RBFOX2_K562,  optimizer: optuna, max_iter: 12}
+  - {id: rbfox2_hepg2_llm,    dataset: RBFOX2_HepG2, optimizer: llm,    max_iter: 10}
+  - {id: rbfox2_hepg2_optuna, dataset: RBFOX2_HepG2, optimizer: optuna, max_iter: 12}

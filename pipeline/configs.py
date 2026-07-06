@@ -12,9 +12,13 @@ DEFAULT_SEARCH_BOUNDS = {
     "pureclip": {
         "merge_distance_nt": [4, 16],
         "bandwidth_nt": [20, 100],
+        "high_precision_mode": [0, 1],
+        "use_input_covariate": [0, 1],
     },
     "postprocessing": {
         "min_crosslink_events": [2, 6],
+        "force_width": [3, 15],
+        "cluster_gap_width": [4, 16],
     },
 }
 
@@ -129,7 +133,8 @@ def validate_config(
     _require_int(pureclip, "pureclip", "bandwidth_nt", 1)
     _require_int(pureclip, "pureclip", "merge_distance_nt", 0)
     for key in ("high_precision_mode", "use_input_covariate"):
-        if not isinstance(pureclip.get(key), bool):
+        val = pureclip.get(key)
+        if not isinstance(val, (bool, int)):
             raise ConfigValidationError(f"pureclip.{key} must be a boolean")
 
     _require_int(post, "postprocessing", "force_width", 1)
@@ -186,6 +191,7 @@ def tunable_snapshot(config: dict[str, Any]) -> dict[str, dict[str, Any]]:
         },
         "postprocessing": {
             "force_width": config["postprocessing"]["force_width"],
+            "cluster_gap_width": config["postprocessing"].get("cluster_gap_width", 8),
             "min_region_length_nt": config["postprocessing"]["min_region_length_nt"],
             "min_crosslink_events": config["postprocessing"]["min_crosslink_events"],
         },
@@ -225,13 +231,21 @@ def apply_decision_changes(
         if not isinstance(section_changes, dict):
             raise ConfigValidationError(f"LLM changes for {section} must be a mapping")
         for key, value in section_changes.items():
-            if key not in bounds[section]:
-                raise ConfigValidationError(f"LLM attempted to change unsupported parameter: {section}.{key}")
-            low, high = bounds[section][key]
-            if not isinstance(value, int):
-                raise ConfigValidationError(f"LLM value for {section}.{key} must be an integer")
-            if not low <= value <= high:
-                raise ConfigValidationError(f"LLM value for {section}.{key}={value} outside bounds [{low}, {high}]")
+            # Accept any parameter in a known section (integer or bool)
+            if isinstance(value, bool):
+                value = 1 if value else 0
+            if not isinstance(value, (int, float, bool)):
+                raise ConfigValidationError(f"LLM value for {section}.{key} must be numeric")
+            value = int(value)
+            # Validate bounds if defined, otherwise just accept
+            if key in bounds[section]:
+                low, high = bounds[section][key]
+                if not low <= value <= high:
+                    raise ConfigValidationError(f"LLM value for {section}.{key}={value} outside bounds [{low}, {high}]")
+            # Convert 0/1 back to bool for boolean fields
+            current_val = new_config[section].get(key)
+            if isinstance(current_val, bool):
+                value = bool(value)
             new_config[section][key] = value
 
     validate_config(new_config, search_bounds=bounds)

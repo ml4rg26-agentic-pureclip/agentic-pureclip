@@ -1,0 +1,29 @@
+# Second ~12h batch — re-run all 5 datasets x both optimizers with the
+# collapse-guarded objective (composite x min(1, n_sites/10)). The key question:
+# now that 1-site collapses score ~0, does Optuna find *real* solutions on QKI?
+# Distinct job ids (_r2) keep this separate from the first 12h run's data.
+#
+#   PYTHONPATH=. uv run python scripts/overnight_batch.py \
+#       --manifest config/bigrun2_jobs.yaml --hours 12 --no-repeat \
+#       --pureclip-dir /vol/storage1/johannes/projects
+
+defaults:
+  threads: 32
+  learn_on_chr21: true
+  per_job_timeout_min: 240
+  objective_weights:
+    reproducibility: 0.5
+    motif: 0.25
+    recall: 0.25
+
+jobs:
+  - {id: pum1_k562_llm_r2,       dataset: PUM1_K562,    optimizer: llm,    max_iter: 12}
+  - {id: pum1_k562_optuna_r2,    dataset: PUM1_K562,    optimizer: optuna, max_iter: 15}
+  - {id: qki_k562_llm_r2,        dataset: QKI_K562,     optimizer: llm,    max_iter: 12}
+  - {id: qki_k562_optuna_r2,     dataset: QKI_K562,     optimizer: optuna, max_iter: 15}
+  - {id: qki_hepg2_llm_r2,       dataset: QKI_HepG2,    optimizer: llm,    max_iter: 10}
+  - {id: qki_hepg2_optuna_r2,    dataset: QKI_HepG2,    optimizer: optuna, max_iter: 12}
+  - {id: rbfox2_k562_llm_r2,     dataset: RBFOX2_K562,  optimizer: llm,    max_iter: 10}
+  - {id: rbfox2_k562_optuna_r2,  dataset: RBFOX2_K562,  optimizer: optuna, max_iter: 12}
+  - {id: rbfox2_hepg2_llm_r2,    dataset: RBFOX2_HepG2, optimizer: llm,    max_iter: 10}
+  - {id: rbfox2_hepg2_optuna_r2, dataset: RBFOX2_HepG2, optimizer: optuna, max_iter: 12}
