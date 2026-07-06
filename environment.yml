@@ -18,7 +18,11 @@ dependencies:
   - pip:
       - langgraph>=0.2.0
       - langchain-google-genai>=2.0.0
+      - langchain-openai>=0.3.0
       - langsmith
+      - optuna>=3.6
+      - gdown>=5.0
+      - tomli>=2.0
       - python-dotenv
       - pytest
       - pydantic>=2.0
