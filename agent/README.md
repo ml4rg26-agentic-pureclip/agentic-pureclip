@@ -4,9 +4,12 @@ This directory contains the core logic for the LangGraph-based agentic workflow.
 
 ## Files
 
-- **`graph.py`**: The main LangGraph state machine. Defines the nodes (`run_pipeline`, `run_scorers`, `agent_decide`, `finalize`) and edges that make up the optimization loop.
+- **`graph.py`**: The main LangGraph state machine (production). Defines the nodes (`run_pipeline`, `run_scorers`, `agent_decide`, `finalize`) and edges that make up the optimization loop.
+- **`graph_mock.py`**: Mock/test version of the state machine. Simulates pipeline execution with fake scores to enable rapid testing without bioinformatics dependencies. Useful for validating agent logic and LLM prompting.
 - **`state.py`**: Defines the `AgentState` schema using Python `TypedDict`. This state is passed between nodes and holds the history, current configuration, and best scores.
 - **`logging_config.py`**: Setup for standardized logging across the agent module.
+- **`decisions.py`**: LLM prompt construction and response parsing. Builds the decision context from priors and history, formats LLM responses into valid parameter proposals.
+- **`report.py`**: A standalone script that generates a PDF/HTML summary report from an optimization run. It reads the dataset configuration, parses the iteration history (`history.jsonl`), utilizes the Gemini API to construct an `LLM Experiment Summary`, and renders a Jinja2 HTML template with a Matplotlib convergence chart before converting it to PDF via Weasyprint (or saving as HTML if Weasyprint is not installed).
 
 ---
 

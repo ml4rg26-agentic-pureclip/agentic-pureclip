@@ -194,6 +194,9 @@ def agent_decide(state: AgentState) -> dict:
 
 
 def should_continue(state: AgentState) -> str:
+    if state.get("termination_reason"):
+        logger.info("Early termination triggered: %s", state["termination_reason"])
+        return "stop"
     if state["current_iteration"] >= state["max_iterations"]:
         logger.info("Hard stop reached")
         return "stop"
@@ -204,11 +207,13 @@ def should_continue(state: AgentState) -> str:
 
 
 def finalize(state: AgentState) -> dict:
-    reason = (
-        "Hard stop: reached max_iterations"
-        if state["current_iteration"] >= state["max_iterations"]
-        else "Converged: no improvement"
-    )
+    reason = state.get("termination_reason")
+    if not reason:
+        reason = (
+            "Hard stop: reached max_iterations"
+            if state["current_iteration"] >= state["max_iterations"]
+            else "Converged: no improvement"
+        )
     save_config(state["best_config"], "config/best_config.yaml")
     logger.info("DONE. %s. Best composite score=%.4f", reason, state["best_score"])
     return {"termination_reason": reason}
@@ -237,7 +242,25 @@ graph = build_graph()
 
 
 if __name__ == "__main__":
-    base_config = _with_iteration_output(load_config(CONFIG_PATH))
+    raw_config = load_config(CONFIG_PATH)
+
+    # Implement Option B: Timestamped run directory
+    import datetime
+    import re
+    session_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dataset_name = os.path.splitext(os.path.basename(CONFIG_PATH))[0]
+
+    output = raw_config.setdefault("output", {})
+    orig_root = str(output.get("results_root", "results/runs")).rstrip("/")
+
+    if re.search(r"_\d{8}_\d{6}$", orig_root):
+        new_root = re.sub(r"_\d{8}_\d{6}$", f"_{session_id}", orig_root)
+    else:
+        new_root = f"{orig_root}/{dataset_name}_{session_id}"
+
+    output["results_root"] = new_root
+
+    base_config = _with_iteration_output(raw_config)
     priors = base_config.get("priors") or json.load(open("config/priors.json", encoding="utf-8"))
     initial_state: AgentState = {
         "priors": priors,

@@ -9,7 +9,6 @@ import copy
 import time
 import random
 from pathlib import Path
-from typing import Literal
 from dotenv import load_dotenv
 
 # Automatically load environment variables from .env file
@@ -169,7 +168,13 @@ Do not repeat parameter sets already in history."""
     new_config = copy.deepcopy(state["current_config"])
     for section, changes in decision["changes"].items():
         new_config[section].update(changes)
-    new_config["run_id"] = f"{state['priors']['target_protein']}_iter_{it + 1:02d}"
+
+    cell_line = state.get("current_config", {}).get("cell_line")
+    if not cell_line:
+        log.warning("cell_line not found in current_config, using 'UNKNOWN_CELL' for run_id")
+        cell_line = "UNKNOWN_CELL"
+        
+    new_config["run_id"] = f"{state['priors']['target_protein']}_{cell_line}_iter_{it + 1:02d}"
 
     improved = objective > state["best_score"] + state["score_improvement_threshold"]
     best_score = objective if improved else state["best_score"]
