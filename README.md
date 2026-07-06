@@ -8,9 +8,8 @@ quality score. Two interchangeable optimizers are available — an **LLM agent**
 (DeepSeek, via LangGraph) and **Optuna** (TPE/Bayesian) — sharing the same
 evaluation and objective, so they can be compared apples-to-apples.
 
-> **For the biology and full project context, read [CLAUDE.md](CLAUDE.md)**
-> (eCLIP, PureCLIP, the RBPs and their motifs, cell lines, and the scoring
-> rationale). This README is the practical quick-start.
+> This README is the practical quick-start (eCLIP, PureCLIP, the RBPs and their
+> motifs, cell lines, and the scoring rationale).
 
 ## What it does
 
@@ -113,4 +112,4 @@ python scripts/write_dataset_config.py RBFOX2_K562 --out config/datasets/RBFOX2_
 Long runs and the dashboard run on `ssh bio`
 (`/vol/storage1/johannes/projects/agentic-pureclip`). `pureclip2` is not on the
 default PATH — prepend `/vol/storage1/johannes/projects`. Tunnel the dashboard:
-`ssh -f -N -L 8888:localhost:8888 bio`. See [CLAUDE.md](CLAUDE.md) §5 for ops.
+`ssh -f -N -L 8888:localhost:8888 bio`.
