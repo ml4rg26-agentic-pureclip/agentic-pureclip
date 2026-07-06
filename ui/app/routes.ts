@@ -11,6 +11,7 @@ export default [
       route("bio-terms", "docsite/pages/BiologyPage.tsx"),
       route("bio-concepts", "docsite/pages/BioConceptsPage.tsx"),
       route("data", "docsite/pages/DataPage.tsx"),
+      route("datasets", "docsite/pages/DatasetsPage.tsx"),
       route("logic", "docsite/pages/LogicPage.tsx"),
     ]),
   ]),

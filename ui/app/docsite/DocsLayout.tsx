@@ -4,6 +4,7 @@ const NAV_LINKS = [
   { to: "/docs/bio-terms", label: "Glossary" },
   { to: "/docs/bio-concepts", label: "Concept Map" },
   { to: "/docs/data", label: "Data & Storage" },
+  { to: "/docs/datasets", label: "Datasets" },
   { to: "/docs/logic", label: "System Logic & Flow" },
 ];
 
