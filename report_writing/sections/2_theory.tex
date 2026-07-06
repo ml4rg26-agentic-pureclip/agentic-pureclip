@@ -1,6 +1,18 @@
 \section{Theory}
 \label{theory}
 
+\scaffold{Bullets to expand. Biology first, then computational tools; keep implementation in \S\ref{method}.}
+\begin{itemize}
+  \item eCLIP mechanism (Van Nostrand et al.\ 2016): UV crosslink $\rightarrow$ immunoprecipitation $\rightarrow$ RT truncates at the crosslink $\rightarrow$ 5$'$ read end marks the contact at $\sim$nucleotide resolution. Two IP replicates + SMInput control.
+  \item PureCLIP: HMM over read 5$'$-start density; ``crosslinked'' vs.\ ``background'' states; optional SMInput covariate. Bandwidth = signal smoothing, merge distance = site grouping --- wrong values give too few or too many sites.
+  \item \textbf{Motif-difficulty axis (central to this work).} Crisp k-mer motifs (RBFOX2 \texttt{UGCAUG}, PUM \texttt{UGUANAUA}) vs.\ degenerate (HNRNPK C-rich, SRSF1 GA-rich) vs.\ positional / non-k-mer (U2AF2 polypyrimidine tract, SF3B1/4 branch point). This spectrum is what separates ``easy'' from ``hard'' for a motif-aware objective.
+  \item What makes a site set ``good'': reproducibility (chance-corrected), motif enrichment (PWM log-odds vs.\ shuffled background), benchmark recall (ENCODE reference regions).
+  \item PWMs / position weight matrices: log-odds scoring; motifs drawn from several databases (mCrossBase, ATtRACT, RBPmap, oRNAment, RBPDB); the most-enriched motif is reported per site set.
+  \item LLM as a reasoning optimizer (domain priors + reading structured feedback) vs.\ Bayesian optimization / TPE (surrogate model, exploration--exploitation, no domain knowledge).
+  \item \TODO{Add the pipeline schematic figure (eCLIP reads $\rightarrow$ PureCLIP $\rightarrow$ sites $\rightarrow$ scoring) and a small motif-class table.}
+  \item \TODO{Add missing citations to \texttt{master.bib}: PureCLIP (Krakau et al.\ 2017), Optuna (Akiba et al.\ 2019), TPE (Bergstra et al.\ 2011), DeepSeek, and the motif databases used.}
+\end{itemize}
+
 % Goal: give the reader the conceptual background needed to understand
 % the project. Biological concepts first, then the computational tools.
 % Implementation specifics belong in §3.

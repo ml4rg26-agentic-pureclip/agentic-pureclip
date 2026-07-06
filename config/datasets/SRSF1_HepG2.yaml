@@ -1,0 +1,75 @@
+run_id: SRSF1_HepG2_iter_00
+dataset_id: SRSF1_HepG2
+target_protein: SRSF1
+cell_line: HepG2
+clip_protocol: eCLIP
+samples:
+  ip:
+    rep1:
+      bam: data/SRSF1_HepG2/bam/ip_rep1_v1/ENCFF867TIG.bam
+    rep2:
+      bam: data/SRSF1_HepG2/bam/ip_rep2_v1/ENCFF418ZXO.bam
+  input_control:
+    rep1:
+      bam: data/SRSF1_HepG2/bam/smi_v1/ENCFF467FPH.bam
+reference:
+  genome_fasta: data/GRCh38.primary_assembly.genome.fa/GRCh38.primary_assembly.genome.fa
+  annotation_gtf: null
+priors:
+  target_protein: SRSF1
+  clip_protocol: eCLIP
+  expected_footprint_width_nt: 9
+  known_motifs:
+  - pattern: ACCTGGACAGG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SRSF1.0
+    consensus: ACCTGGACAGG
+  - pattern: GGACCTGGAGG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SRSF1.1
+    consensus: GGACCTGGAGG
+  - pattern: ACATGGACCTG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SRSF1.2
+    consensus: ACATGGACCTG
+  - pattern: CCTGGACCTGG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SRSF1.3
+    consensus: CCTGGACCTGG
+  - pattern: GACATGGACCG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SRSF1.4
+    consensus: GACATGGACCG
+  primary_objective_metric: replicate_agreement
+pureclip:
+  bandwidth_nt: 50
+  merge_distance_nt: 8
+  high_precision_mode: false
+  use_input_covariate: true
+  use_cl_motif_covariate: false
+  cl_motif_file: null
+postprocessing:
+  force_width: 9
+  cluster_gap_width: 8
+  min_region_length_nt: 3
+  min_crosslink_events: 3
+reproducibility:
+  percentile_threshold: 10
+  min_crosslink_events_floor: 2
+  min_replicates_passing: 2
+benchmark:
+  top_regions_bed: data/SRSF1_HepG2/top_regions/regions.bed6
+  top_crosslinks_bed: data/SRSF1_HepG2/top_crosslink_sites/crosslinks.bed6
+  top_genes: data/SRSF1_HepG2/top_genes/list.txt
+  biotypes_tsv: data/SRSF1_HepG2/biotypes_genetypes/biotypes_proportions.tsv
+  genotypes_tsv: data/SRSF1_HepG2/biotypes_genetypes/genetypes_proportions.tsv
+output:
+  results_dir: results/datasets/SRSF1_HepG2
+resources:
+  max_memory_gb: 16
+  threads: 8

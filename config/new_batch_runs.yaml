@@ -1,0 +1,29 @@
+# Preliminary runs for the 2026-07 Google-Drive dataset batches (20 new datasets).
+# chr21-restricted optimization ("preliminary" regime) so all datasets finish well
+# within 24h; full-genome confirmation of the best configs is a separate follow-up.
+#
+# Launch:
+#   uv run python scripts/batch_runner.py --manifest config/new_batch_runs.yaml --parallel 4
+# threads=8 x parallel=4 packs the 32-core runner.
+
+runs:
+  - {id: new_hnrnpk_hepg2, dataset: HNRNPK_HepG2, chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_hnrnpk_k562,  dataset: HNRNPK_K562,  chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_hnrnpm_hepg2, dataset: HNRNPM_HepG2, chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_hnrnpm_k562,  dataset: HNRNPM_K562,  chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_sf3b1_k562,   dataset: SF3B1_K562,   chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_sf3b4_hepg2,  dataset: SF3B4_HepG2,  chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_sf3b4_k562,   dataset: SF3B4_K562,   chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_sfpq_hepg2,   dataset: SFPQ_HepG2,   chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_srsf1_hepg2,  dataset: SRSF1_HepG2,  chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_srsf1_k562,   dataset: SRSF1_K562,   chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_u2af1_hepg2,  dataset: U2AF1_HepG2,  chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_u2af1_k562,   dataset: U2AF1_K562,   chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_u2af2_hepg2,  dataset: U2AF2_HepG2,  chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_u2af2_k562,   dataset: U2AF2_K562,   chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_rbm22_hepg2,  dataset: RBM22_HepG2,  chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_rbm22_k562,   dataset: RBM22_K562,   chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_pcbp1_hepg2,  dataset: PCBP1_HepG2,  chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_pcbp1_k562,   dataset: PCBP1_K562,   chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_pum2_k562,    dataset: PUM2_K562,    chr21_only: true, max_iter: 6, threads: 8}
+  - {id: new_ptbp1_hepg2,  dataset: PTBP1_HepG2,  chr21_only: true, max_iter: 6, threads: 8}

@@ -1,0 +1,75 @@
+run_id: SFPQ_HepG2_iter_00
+dataset_id: SFPQ_HepG2
+target_protein: SFPQ
+cell_line: HepG2
+clip_protocol: eCLIP
+samples:
+  ip:
+    rep1:
+      bam: data/SFPQ_HepG2/bam/ip_rep1_v1/ENCFF857OFG.bam
+    rep2:
+      bam: data/SFPQ_HepG2/bam/ip_rep2_v1/ENCFF056KWN.bam
+  input_control:
+    rep1:
+      bam: data/SFPQ_HepG2/bam/smi_v1/ENCFF949MMS.bam
+reference:
+  genome_fasta: data/GRCh38.primary_assembly.genome.fa/GRCh38.primary_assembly.genome.fa
+  annotation_gtf: null
+priors:
+  target_protein: SFPQ
+  clip_protocol: eCLIP
+  expected_footprint_width_nt: 9
+  known_motifs:
+  - pattern: TTGTTCCGTCT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SFPQ.0
+    consensus: TTGTTCCGTCT
+  - pattern: TGTTCCGTCTT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SFPQ.1
+    consensus: TGTTCCGTCTT
+  - pattern: TTCCGTAATGT
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SFPQ.2
+    consensus: TTCCGTAATGT
+  - pattern: TTTATTCCGTC
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SFPQ.3
+    consensus: TTTATTCCGTC
+  - pattern: TCTGTACCGTC
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.SFPQ.4
+    consensus: TCTGTACCGTC
+  primary_objective_metric: replicate_agreement
+pureclip:
+  bandwidth_nt: 50
+  merge_distance_nt: 8
+  high_precision_mode: false
+  use_input_covariate: true
+  use_cl_motif_covariate: false
+  cl_motif_file: null
+postprocessing:
+  force_width: 9
+  cluster_gap_width: 8
+  min_region_length_nt: 3
+  min_crosslink_events: 3
+reproducibility:
+  percentile_threshold: 10
+  min_crosslink_events_floor: 2
+  min_replicates_passing: 2
+benchmark:
+  top_regions_bed: data/SFPQ_HepG2/top_regions/regions.bed6
+  top_crosslinks_bed: data/SFPQ_HepG2/top_crosslink_sites/crosslinks.bed6
+  top_genes: data/SFPQ_HepG2/top_genes/list.txt
+  biotypes_tsv: data/SFPQ_HepG2/biotypes_genetypes/biotypes_proportions.tsv
+  genotypes_tsv: data/SFPQ_HepG2/biotypes_genetypes/genetypes_proportions.tsv
+output:
+  results_dir: results/datasets/SFPQ_HepG2
+resources:
+  max_memory_gb: 16
+  threads: 8

@@ -1,6 +1,16 @@
 \section{Discussion, Limitations \& Future Work}
 \label{discussion}
 
+\scaffold{Bullets to expand. Detailed \% guidance below is largely still valid; add the motif-difficulty and positional-binder angles.}
+\begin{itemize}
+  \item \textbf{Interpretation via motif difficulty.} Frame the LLM-vs-Optuna outcome against the crisp/degenerate/positional axis: the LLM's prior should matter most where the objective's motif signal is weakest and Optuna is searching blind. If the margin does \emph{not} widen, that is itself a finding --- the prior buys little on hard RBPs.
+  \item \textbf{Positional binders expose an objective limitation.} For U2AF/SF3B/RBM22 the motif term is a weak proxy (binding is defined by splice-site position, not a k-mer), so composite scores for these should be read with care --- a positional prior is the natural fix (identified, not implemented).
+  \item \textbf{Infrastructure as a contribution.} The shared-objective dashboard and manifest-driven runners make the study reproducible and the LLM-vs-Optuna comparison auditable per iteration.
+  \item Limitations already outlined below: chr21-only, small search space, single LLM (no prompt ablation), budget asymmetry, mononucleotide-shuffle background, ENCODE reference is pipeline output not gold standard.
+  \item \TODO{Cross-cell-line reproducibility analysis (paired K562/HepG2) is enabled by the new data but not yet done.}
+  \item \TODO{Add iso-budget re-run and a prior-ablation of the LLM (remove biological priors / delta table) to isolate where the LLM's advantage comes from.}
+\end{itemize}
+
 % ── 1. Interpretation ─────────────────────────────────────────────────
 %   LLM advantage (if observed): biological priors (collapse avoidance,
 %   expected footprint, motif identity) give the LLM a head start that

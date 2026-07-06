@@ -234,11 +234,17 @@ def _strip_iter(run_id: str) -> str:
 
 
 def _result_roots() -> list[Path]:
-    """Result roots to scan: live runs, batch runs, and each overnight job dir."""
-    roots = list(RESULT_ROOTS)
-    overnight = Path("results/overnight")
-    if overnight.exists():
-        roots += [d for d in overnight.iterdir() if d.is_dir()]
+    """Result roots to scan: score_report.json files live one level below each.
+
+    Live runs sit directly under ``results/runs/<iter>/``. Batch and overnight
+    jobs add a job level (``results/{batch,overnight}/<job>/<iter>/``), so we
+    expand those into their per-job dirs — otherwise a plain
+    ``results/batch/*/score_report.json`` glob misses every batch iteration.
+    """
+    roots: list[Path] = [Path("results/runs")]
+    for parent in (Path("results/batch"), Path("results/overnight")):
+        if parent.exists():
+            roots += [d for d in parent.iterdir() if d.is_dir()]
     return roots
 
 
@@ -246,7 +252,7 @@ def _source_label(root: Path) -> str:
     parts = root.parts
     if "overnight" in parts:
         return "overnight"
-    if root.name == "batch":
+    if "batch" in parts:
         return "batch"
     return "live"
 
@@ -505,13 +511,20 @@ def _param_diff(prev: dict | None, curr: dict) -> list[dict]:
 
 
 def collect_runs() -> list[dict]:
-    """Per-run decision trail: each iteration's params, what changed, and the reasoning."""
-    root = Path("results/overnight")
-    if not root.exists():
+    """Per-run decision trail: each iteration's params, what changed, and the reasoning.
+
+    Covers both overnight jobs and batch jobs — they share the layout
+    ``<job>/decisions.jsonl`` + ``<job>/<iter>/score_report.json``.
+    """
+    job_dirs: list[Path] = []
+    for parent in (Path("results/overnight"), Path("results/batch")):
+        if parent.exists():
+            job_dirs += [x for x in parent.iterdir() if x.is_dir()]
+    if not job_dirs:
         return []
     opt_map = _overnight_optimizers()
     runs = []
-    for d in (x for x in root.iterdir() if x.is_dir()):
+    for d in job_dirs:
         reports = sorted(d.glob("*/score_report.json"), key=lambda p: p.stat().st_mtime)
         if not reports:
             continue
@@ -562,6 +575,92 @@ def collect_runs() -> list[dict]:
     return runs
 
 
+def _read_bed_sites(bed: Path, cap: int = 4000) -> list[dict]:
+    """Parse a BED file into [{chrom,start,end}] (first ``cap`` intervals)."""
+    sites: list[dict] = []
+    try:
+        for line in bed.read_text().splitlines():
+            if not line or line.startswith(("#", "track", "browser")):
+                continue
+            f = line.split("\t") if "\t" in line else line.split()
+            if len(f) < 3:
+                continue
+            try:
+                start, end = int(f[1]), int(f[2])
+            except ValueError:
+                continue
+            sites.append({"chrom": f[0], "start": start, "end": end})
+            if len(sites) >= cap:
+                break
+    except Exception:
+        return []
+    return sites
+
+
+def collect_run_sites(dataset: str) -> dict:
+    """Binding-site coordinates for a dataset's best-scoring iteration.
+
+    Reads the ``binding_sites.reproducible.bed`` that sits next to each
+    ``score_report.json``; picks the iteration with the highest composite so the
+    "where did the RBP dock" view reflects the best result we found. Positions
+    are real; ``motif_bearing`` is an approximation (we flag round(hit_rate·N)
+    sites — per-site motif calls are not persisted) purely for illustration.
+    """
+    best = None  # (composite, report_path, report_dict)
+    for root in _result_roots():
+        if not root.exists():
+            continue
+        for report in root.glob("*/score_report.json"):
+            try:
+                d = json.loads(report.read_text())
+            except Exception:
+                continue
+            ds = d.get("dataset_id") or _strip_iter(report.parent.name)
+            if ds != dataset:
+                continue
+            comp = composite_objective(d)
+            key = comp if comp is not None else -1.0
+            if best is None or key > best[0]:
+                best = (key, report, d)
+    if best is None:
+        return {"dataset": dataset, "found": False, "sites": []}
+
+    _, report, d = best
+    bed = report.parent / "binding_sites.reproducible.bed"
+    sites = _read_bed_sites(bed) if bed.exists() else []
+    coords = [s["start"] for s in sites] + [s["end"] for s in sites]
+    lo, hi = (min(coords), max(coords)) if coords else (0, 0)
+    chrom = sites[0]["chrom"] if sites else (
+        "chr21" if (d.get("params") or {}) and "chr21" in str(report) else "genome")
+
+    # Approximate motif-bearing flag: spread hit_rate·N hits deterministically.
+    hit_rate = d.get("motif_hit_rate") or 0.0
+    n_hits = int(round(hit_rate * len(sites)))
+    if sites and n_hits:
+        step = max(1, len(sites) // n_hits)
+        for i, s in enumerate(sites):
+            s["motif"] = (i % step == 0) and (sum(1 for x in sites[:i] if x.get("motif")) < n_hits)
+    for s in sites:
+        s.setdefault("motif", False)
+
+    return {
+        "dataset": dataset,
+        "found": True,
+        "run_id": d.get("run_id") or report.parent.name,
+        "source": _source_label(report.parents[1] if report.parents[1] != Path(".") else report.parent),
+        "chrom": chrom,
+        "extent": {"start": lo, "end": hi},
+        "n_sites": d.get("n_binding_sites") if d.get("n_binding_sites") is not None else len(sites),
+        "composite": round(best[0], 4) if best[0] >= 0 else None,
+        "reproducibility": d.get("reproducibility_score"),
+        "motif_hit_rate": hit_rate,
+        "motif_enrichment": d.get("motif_enrichment"),
+        "recall": d.get("benchmark_region_recall"),
+        "params": d.get("params") or {},
+        "sites": sites,
+    }
+
+
 def build_status() -> dict:
     cfg = _read_yaml(RUN_CONFIG)
     procs = get_processes()
@@ -593,337 +692,6 @@ def build_status() -> dict:
         "experiments": experiments,
         "processes": procs,
     }
-
-
-# ── frontend ────────────────────────────────────────────────────────────────
-
-HTML = r"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Agentic PureCLIP — Run Monitor</title>
-<style>
-  :root { --bg:#0d1117; --card:#161b22; --card2:#0f141a; --border:#30363d; --text:#c9d1d9;
-          --green:#3fb950; --yellow:#d2991d; --red:#f85149; --blue:#58a6ff;
-          --accent:#1f6feb; --muted:#8b949e; --purple:#bc8cff; }
-  * { margin:0; padding:0; box-sizing:border-box; }
-  body { background:var(--bg); color:var(--text);
-         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-         padding:24px; max-width:1180px; margin:0 auto; }
-  h1 { font-size:20px; margin-bottom:4px; } h1 span { color:var(--blue); }
-  .subtitle { color:var(--muted); font-size:13px; margin-bottom:20px; }
-  .section { background:var(--card); border:1px solid var(--border); border-radius:10px;
-             padding:18px 20px; margin-bottom:18px; }
-  .section h2 { font-size:12px; color:var(--muted); text-transform:uppercase;
-                letter-spacing:0.6px; margin-bottom:14px; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:right; color:var(--muted); font-weight:500; padding:6px 10px;
-       border-bottom:1px solid var(--border); }
-  th:first-child, td:first-child { text-align:left; }
-  td { padding:6px 10px; border-bottom:1px solid var(--border); font-variant-numeric:tabular-nums; text-align:right; }
-  tr:hover { background:rgba(255,255,255,0.03); }
-  .best td { background:rgba(63,185,80,0.10); }
-  .best td:first-child { box-shadow:inset 3px 0 0 var(--green); }
-  .badge { display:inline-block; padding:2px 9px; border-radius:10px; font-size:11px; font-weight:600; }
-  .badge-running { background:rgba(210,153,29,0.16); color:var(--yellow); }
-  .badge-idle { background:rgba(139,148,158,0.16); color:var(--muted); }
-  .badge-live { background:rgba(63,185,80,0.14); color:var(--green); }
-  .badge-batch { background:rgba(188,140,255,0.14); color:var(--purple); }
-  .badge-overnight { background:rgba(210,153,29,0.16); color:var(--yellow); }
-  .badge-llm { background:rgba(88,166,255,0.16); color:var(--blue); }
-  .badge-optuna { background:rgba(210,153,29,0.18); color:var(--yellow); }
-  .badge-queued { background:rgba(139,148,158,0.16); color:var(--muted); }
-  .badge-done { background:rgba(63,185,80,0.15); color:var(--green); }
-  .badge-error { background:rgba(248,81,73,0.15); color:var(--red); }
-  .progress-bar { height:6px; background:var(--border); border-radius:3px; overflow:hidden; display:inline-block; }
-  .progress-fill { height:100%; background:var(--accent); border-radius:3px; }
-  .progress-fill.running { background:var(--yellow); animation:pulse 1.6s infinite; }
-  .empty { color:var(--muted); font-style:italic; padding:10px; }
-
-  /* active run card */
-  .active-head { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
-  .ds-pill { font-size:15px; font-weight:700; }
-  .ds-sub { color:var(--muted); font-size:13px; }
-  .stepper { display:flex; gap:8px; margin:6px 0 18px; flex-wrap:wrap; }
-  .step { flex:1; min-width:120px; padding:10px 12px; border-radius:8px; border:1px solid var(--border);
-          background:var(--card2); font-size:12px; position:relative; }
-  .step .n { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; }
-  .step .s { font-size:13px; font-weight:600; margin-top:2px; }
-  .step.done { border-color:rgba(63,185,80,0.4); }
-  .step.done .s { color:var(--green); }
-  .step.active { border-color:var(--yellow); background:rgba(210,153,29,0.08); animation:pulse 1.6s infinite; }
-  .step.active .s { color:var(--yellow); }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.62} }
-
-  .metrics { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }
-  @media(max-width:760px){ .metrics{grid-template-columns:repeat(2,1fr)} .stepper .step{min-width:45%} }
-  .metric-card { background:var(--card2); border:1px solid var(--border); border-radius:8px;
-                 padding:12px; text-align:center; }
-  .metric-card .v { font-size:22px; font-weight:700; }
-  .metric-card .l { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px; margin-top:2px; }
-  .metric-card.primary { border-color:var(--accent); }
-  .metric-card.primary .v { color:var(--blue); }
-
-  .params { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
-  .chip { background:var(--card2); border:1px solid var(--border); border-radius:6px;
-          padding:4px 9px; font-size:12px; }
-  .chip b { color:var(--text); } .chip span { color:var(--muted); }
-
-  .reasoning { background:var(--card2); border-left:3px solid var(--purple); border-radius:0 6px 6px 0;
-               padding:11px 14px; font-size:13px; line-height:1.5; color:#d8dde3; }
-  .reasoning .lbl { color:var(--purple); font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
-                    display:block; margin-bottom:5px; }
-
-  .exp-head { display:flex; align-items:baseline; gap:10px; margin-bottom:10px; }
-  .exp-head .name { font-size:14px; font-weight:700; }
-  .spark { display:inline-flex; gap:2px; align-items:flex-end; height:22px; vertical-align:middle; }
-  .spark i { width:5px; background:var(--accent); border-radius:1px; min-height:2px; display:block; }
-  .spark i.best { background:var(--green); }
-  .refresh { color:var(--muted); font-size:11px; text-align:right; margin-top:8px; }
-  .src { font-size:10px; }
-</style>
-</head>
-<body>
-<h1>🧬 Agentic PureCLIP <span>Monitor</span></h1>
-<div class="subtitle" id="hostInfo">loading…</div>
-
-<div class="section" id="activeSection">
-  <h2>⚡ Active Run</h2>
-  <div id="active"><div class="empty">Loading…</div></div>
-</div>
-
-<div class="section" id="planSection" style="display:none">
-  <h2>📋 Batch Queue &amp; ETA</h2>
-  <div id="plan"></div>
-</div>
-
-<div class="section">
-  <h2>🔬 Optimisation Trajectories</h2>
-  <div id="experiments"><div class="empty">No runs found yet</div></div>
-</div>
-
-<div class="section">
-  <h2>🖥 Processes</h2>
-  <div id="procs"><div class="empty">No active processes</div></div>
-</div>
-
-<div class="refresh">Auto-refresh every 6s · <span id="lastUpdate"></span></div>
-
-<script>
-const fmt = (v, d=4) => (v===null||v===undefined) ? '—' : Number(v).toFixed(d);
-const fmtx = (v) => (v===null||v===undefined) ? '—' : Number(v).toFixed(2)+'×';
-const esc = (s) => (s||'').replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-
-async function fetchData(){
-  try{
-    const data = await (await fetch('/api/status')).json();
-    render(data);
-    document.getElementById('lastUpdate').textContent = 'Last update: ' + new Date().toLocaleTimeString();
-  }catch(e){ console.error(e); }
-}
-
-function renderActive(a, stages){
-  if(!a || !a.is_active){
-    return '<div class="empty">No run is currently active. Latest results below.</div>';
-  }
-  const proteinLine = [a.target_protein, a.cell_line].filter(Boolean).join(' · ');
-  const optBadge = a.optimizer==='optuna'
-    ? '<span class="badge badge-optuna">OPTUNA · TPE</span>'
-    : (a.optimizer==='llm' ? '<span class="badge badge-llm">LLM</span>' : '');
-  let h = `<div class="active-head">
-    <span class="badge badge-running">RUNNING</span>
-    ${optBadge}
-    <span class="ds-pill">${esc(a.dataset||'—')}</span>
-    <span class="ds-sub">${esc(proteinLine)}</span>
-    <span class="ds-sub">• ${esc(a.run_id||'')}${a.iteration!==null?` · iteration ${a.iteration}`:''}</span>
-    ${a.elapsed?`<span class="ds-sub">• elapsed ${esc(a.elapsed)}</span>`:''}
-  </div>`;
-
-  h += '<div class="stepper">';
-  stages.forEach((s,i)=>{
-    let cls = ''; if(a.stage_index>i) cls='done'; else if(a.stage_index===i) cls='active';
-    const sub = (a.stage_index===i && a.substage) ? ` (${esc(a.substage)})` : '';
-    h += `<div class="step ${cls}"><div class="n">step ${i+1}</div><div class="s">${esc(s)}${sub}</div></div>`;
-  });
-  h += '</div>';
-
-  const m = a.latest || {};
-  const repro = (m.reproducibility!==null&&m.reproducibility!==undefined) ? m.reproducibility : m.agreement;
-  h += `<div class="metrics">
-    <div class="metric-card primary"><div class="v">${fmt(m.composite)}</div><div class="l">composite</div></div>
-    <div class="metric-card"><div class="v">${fmt(repro)}</div><div class="l">reproducibility${m.repro_enrichment!==null&&m.repro_enrichment!==undefined?` (${fmtx(m.repro_enrichment)})`:''}</div></div>
-    <div class="metric-card"><div class="v">${fmt(m.motif)}</div><div class="l">motif hit-rate (${fmtx(m.enrichment)})</div></div>
-    <div class="metric-card"><div class="v">${fmt(m.recall)}</div><div class="l">known-site recall</div></div>
-    <div class="metric-card"><div class="v">${m.n_sites??'—'}</div><div class="l">binding sites</div></div>
-  </div>`;
-
-  const p = a.params||{};
-  const chip = (k,v)=> v===null||v===undefined ? '' : `<div class="chip"><span>${k}</span> <b>${esc(String(v))}</b></div>`;
-  h += `<div class="params">
-    ${chip('bandwidth', p.bandwidth_nt)}
-    ${chip('merge_dist', p.merge_distance_nt)}
-    ${chip('min_xl_events', p.min_crosslink_events)}
-    ${chip('force_width', p.force_width)}
-    ${chip('high_precision', p.high_precision_mode)}
-    ${chip('chr21_fast', p.learn_on_chr21)}
-  </div>`;
-
-  if(a.optimizer==='llm' && a.reasoning){
-    h += `<div class="reasoning"><span class="lbl">latest agent reasoning</span>${esc(a.reasoning)}</div>`;
-  } else if(a.optimizer==='optuna'){
-    h += `<div class="reasoning"><span class="lbl">strategy</span>Optuna TPE (Bayesian) — proposes the next parameter set by modelling past trials; no natural-language reasoning.</div>`;
-  }
-  return h;
-}
-
-function sparkline(items){
-  const vals = items.map(i=>i.composite).filter(v=>v!==null&&v!==undefined);
-  if(!vals.length) return '';
-  const max = Math.max(...vals), min = Math.min(...vals);
-  const span = (max-min)||1;
-  let h = '<span class="spark">';
-  for(const i of items){
-    const v = i.composite;
-    if(v===null||v===undefined){ h+='<i style="height:2px;opacity:.3"></i>'; continue; }
-    const ht = 4 + Math.round((v-min)/span*18);
-    const best = v===max ? ' best':'';
-    h += `<i class="${best.trim()}" style="height:${ht}px"></i>`;
-  }
-  return h+'</span>';
-}
-
-function renderExperiments(exps){
-  if(!exps || !exps.length) return '<div class="empty">No runs found yet</div>';
-  let html = '';
-  const optBadge = (o) => o==='optuna'
-    ? '<span class="badge badge-optuna src">optuna</span>'
-    : '<span class="badge badge-llm src">llm</span>';
-  for(const g of exps){
-    // Per-optimizer best, so a head-to-head shows up when a dataset has both.
-    const byOpt = {};
-    for(const it of g.iterations){
-      const o = it.optimizer||'llm';
-      if(it.composite!=null && (byOpt[o]===undefined || it.composite>byOpt[o])) byOpt[o]=it.composite;
-    }
-    let versus = '';
-    if(byOpt.llm!==undefined && byOpt.optuna!==undefined){
-      const win = byOpt.llm===byOpt.optuna ? 'tie' : (byOpt.llm>byOpt.optuna?'LLM':'Optuna');
-      versus = ` · <b style="color:var(--blue)">LLM ${fmt(byOpt.llm)}</b> vs <b style="color:var(--yellow)">Optuna ${fmt(byOpt.optuna)}</b> → ${win}`;
-    }
-    html += `<div style="margin-bottom:22px">
-      <div class="exp-head">
-        <span class="name">${esc(g.name)}</span>
-        <span class="ds-sub">${g.n_iters} iteration${g.n_iters===1?'':'s'} · best <b style="color:var(--green)">${fmt(g.best_composite)}</b>${versus}</span>
-        ${sparkline(g.iterations)}
-      </div>`;
-    html += `<table><tr>
-      <th>run</th><th>opt</th><th>iter</th><th>sites</th><th>reprod.</th>
-      <th>motif</th><th>recall</th><th>composite</th><th>src</th></tr>`;
-    for(const it of g.iterations){
-      const isBest = it.run_id===g.best_run;
-      const srcBadge = it.source==='batch'
-        ? '<span class="badge badge-batch src">batch</span>'
-        : it.source==='overnight'
-        ? '<span class="badge badge-overnight src">overnight</span>'
-        : '<span class="badge badge-live src">live</span>';
-      const repro = (it.reproducibility!==null&&it.reproducibility!==undefined) ? it.reproducibility : it.agreement;
-      html += `<tr class="${isBest?'best':''}">
-        <td>${esc(it.run_id)}</td>
-        <td>${optBadge(it.optimizer)}</td>
-        <td>${it.iter===null?'—':it.iter}</td>
-        <td>${it.n_sites??'—'}</td>
-        <td>${fmt(repro)}</td>
-        <td>${fmt(it.motif)}</td>
-        <td>${fmt(it.recall)}</td>
-        <td><b>${fmt(it.composite)}</b></td>
-        <td>${srcBadge}</td>
-      </tr>`;
-    }
-    html += '</table></div>';
-  }
-  return html;
-}
-
-function humanDur(s){
-  if(s===null||s===undefined) return '—';
-  s = Math.max(0, Math.round(s));
-  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60);
-  if(h>0) return `${h}h ${m}m`;
-  if(m>0) return `${m}m`;
-  return `${s}s`;
-}
-function clockIn(s){
-  const t = new Date(Date.now()+s*1000);
-  return t.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-}
-
-function renderPlan(plan){
-  const sec = document.getElementById('planSection');
-  if(!plan || !plan.jobs || !plan.jobs.length){ sec.style.display='none'; return ''; }
-  sec.style.display='';
-  const c = plan.counts||{};
-  const manifest = (plan.manifest||'').split('/').pop();
-  let h = `<div class="ds-sub" style="margin-bottom:12px">
-      ${esc(manifest)} · <b>${c.done||0}</b> done · <b style="color:var(--yellow)">${c.running||0}</b> running · <b>${c.queued||0}</b> queued
-      ${plan.eta_remaining_s>0 ? ` · <b style="color:var(--blue)">~${humanDur(plan.eta_remaining_s)} left</b> (finish ~${clockIn(plan.eta_remaining_s)})` : ' · <b style="color:var(--green)">complete</b>'}
-      <span class="ds-sub" style="opacity:.7"> · estimates are rough</span>
-    </div>`;
-  h += '<table><tr><th>#</th><th>job</th><th>opt</th><th>dataset</th><th>status</th><th>progress</th><th>best</th><th>ETA</th></tr>';
-  plan.jobs.forEach((j,i)=>{
-    const optB = j.optimizer==='optuna'
-      ? '<span class="badge badge-optuna src">optuna</span>'
-      : '<span class="badge badge-llm src">llm</span>';
-    let statusB, progress, best='—', eta='—';
-    if(j.status==='running'){
-      const done=j.done_iters||0, frac=Math.min(1, done/(j.max_iter||1));
-      statusB='<span class="badge badge-running">running</span>';
-      progress=`<div style="display:flex;align-items:center;gap:6px">${done}/${j.max_iter}
-        <div class="progress-bar" style="width:90px"><div class="progress-fill running" style="width:${Math.round(frac*100)}%"></div></div></div>`;
-      eta='~'+humanDur(j.eta_remaining_s);
-    } else if(j.status==='queued'){
-      statusB='<span class="badge badge-queued">queued</span>';
-      progress=`0/${j.max_iter}`;
-      eta='~'+humanDur(j.eta_remaining_s);
-    } else {
-      const ok = j.status==='completed';
-      statusB=`<span class="badge ${ok?'badge-done':'badge-error'}">${esc(j.status)}</span>`;
-      progress=`${j.max_iter}/${j.max_iter}`;
-      best = fmt(j.best_composite);
-      eta = j.duration_s!==undefined&&j.duration_s!==null ? humanDur(j.duration_s) : '—';
-    }
-    const cls = j.status==='running' ? 'best' : '';
-    h += `<tr class="${cls}">
-      <td>${i+1}</td><td>${esc(j.job_id)}</td><td>${optB}</td><td>${esc(j.dataset)}</td>
-      <td>${statusB}</td><td>${progress}</td><td><b>${best}</b></td><td>${eta}</td></tr>`;
-  });
-  h += '</table>';
-  return h;
-}
-
-function renderProcs(procs){
-  if(!procs || !procs.length) return '<div class="empty">No active processes</div>';
-  let h = '<table><tr><th>process</th><th>CPU%</th><th>MEM%</th><th>elapsed</th></tr>';
-  for(const p of procs){
-    h += `<tr><td>${esc(p.label)}</td><td>${esc(p.cpu)}</td><td>${esc(p.mem)}</td><td>${esc(p.etime)}</td></tr>`;
-  }
-  return h+'</table>';
-}
-
-function render(data){
-  document.getElementById('hostInfo').textContent =
-    `${data.host} · ${data.cpus} CPUs · ${data.mem} RAM`;
-  document.getElementById('active').innerHTML = renderActive(data.active, data.stages);
-  document.getElementById('plan').innerHTML = renderPlan(data.plan);
-  document.getElementById('experiments').innerHTML = renderExperiments(data.experiments);
-  document.getElementById('procs').innerHTML = renderProcs(data.processes);
-}
-
-fetchData();
-setInterval(fetchData, 6000);
-</script>
-</body>
-</html>"""
 
 
 def _run_active() -> bool:
@@ -1041,8 +809,9 @@ def schedule_run(spec: dict) -> tuple[int, dict]:
     }
 
 
-# Built React SPA (ui/build/client). When present it is served at / and the
-# embedded HTML is the fallback for environments without a build.
+# Built React SPA (ui/build/client) — the only frontend. Build it with
+# `cd ui && npm run build`; this server just exposes the /api/* endpoints and
+# serves that build.
 UI_DIST = Path("ui/build/client")
 
 
@@ -1123,14 +892,35 @@ class MonitorHandler(BaseHTTPRequestHandler):
         if self.path == "/api/runs":
             self._json(200, {"runs": collect_runs()})
             return
-        # Prefer the built React app; otherwise serve the embedded dashboard.
+        if self.path.startswith("/api/run_sites"):
+            from urllib.parse import urlparse, parse_qs
+            q = parse_qs(urlparse(self.path).query)
+            dataset = (q.get("dataset") or [""])[0]
+            if not dataset:
+                self._json(400, {"error": "missing ?dataset="})
+                return
+            try:
+                self._json(200, collect_run_sites(dataset))
+            except Exception as exc:
+                self._json(500, {"error": str(exc), "dataset": dataset, "sites": []})
+            return
+        # Serve the built React SPA (ui/build/client).
         if UI_DIST.exists() and self._serve_spa():
             return
         if self.path in ("/", "/index.html"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
-            self.wfile.write(HTML.encode())
+            self.wfile.write(
+                (
+                    "<!doctype html><meta charset=utf-8>"
+                    "<body style='font:14px system-ui;max-width:40em;margin:4em auto'>"
+                    "<h2>UI build not found</h2>"
+                    "<p>The dashboard now lives entirely in <code>ui/</code>. "
+                    "Build it once with <code>cd ui &amp;&amp; npm install &amp;&amp; npm run build</code>, "
+                    "then reload — this server will serve <code>ui/build/client</code>.</p>"
+                ).encode()
+            )
             return
         self.send_response(404)
         self.end_headers()

@@ -1,0 +1,95 @@
+run_id: SF3B1_K562_iter_00
+dataset_id: SF3B1_K562
+target_protein: SF3B1
+cell_line: K562
+clip_protocol: eCLIP
+samples:
+  ip:
+    rep1:
+      bam: data/SF3B1_K562/bam/ip_rep1_v1/ENCFF564ARY.bam
+    rep2:
+      bam: data/SF3B1_K562/bam/ip_rep2_v1/ENCFF959GNA.bam
+  input_control:
+    rep1:
+      bam: data/SF3B1_K562/bam/smi_v1/ENCFF359HHB.bam
+reference:
+  genome_fasta: data/GRCh38.primary_assembly.genome.fa/GRCh38.primary_assembly.genome.fa
+  annotation_gtf: null
+priors:
+  target_protein: SF3B1
+  clip_protocol: eCLIP
+  expected_footprint_width_nt: 9
+  known_motifs:
+  - pattern: TAACCTAACAG
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.0
+    consensus: TAACCTAACAG
+  - pattern: GACTAAATAAT
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.1
+    consensus: GACTAAATAAT
+  - pattern: ACACTATTCAG
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.2
+    consensus: ACACTATTCAG
+  - pattern: AAGCTAAATAA
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.3
+    consensus: AAGCTAAATAA
+  - pattern: AAAGTCCTTAC
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.4
+    consensus: AAAGTCCTTAC
+  - pattern: TTTAACTAGAA
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.5
+    consensus: TTTAACTAGAA
+  - pattern: CCCTAGTCCGG
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.6
+    consensus: CCCTAGTCCGG
+  - pattern: AAAGGCTATGA
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.7
+    consensus: AAAGGCTATGA
+  - pattern: AAAACTAGCAG
+    type: target
+    source_database: mCrossBase
+    motif_id: K562.SF3B1.8
+    consensus: AAAACTAGCAG
+  primary_objective_metric: replicate_agreement
+pureclip:
+  bandwidth_nt: 50
+  merge_distance_nt: 8
+  high_precision_mode: false
+  use_input_covariate: true
+  use_cl_motif_covariate: false
+  cl_motif_file: null
+postprocessing:
+  force_width: 9
+  cluster_gap_width: 8
+  min_region_length_nt: 3
+  min_crosslink_events: 3
+reproducibility:
+  percentile_threshold: 10
+  min_crosslink_events_floor: 2
+  min_replicates_passing: 2
+benchmark:
+  top_regions_bed: data/SF3B1_K562/top_regions/regions.bed6
+  top_crosslinks_bed: data/SF3B1_K562/top_crosslink_sites/crosslinks.bed6
+  top_genes: data/SF3B1_K562/top_genes/list.txt
+  biotypes_tsv: data/SF3B1_K562/biotypes_genetypes/biotypes_proportions.tsv
+  genotypes_tsv: data/SF3B1_K562/biotypes_genetypes/genetypes_proportions.tsv
+output:
+  results_dir: results/datasets/SF3B1_K562
+resources:
+  max_memory_gb: 16
+  threads: 8

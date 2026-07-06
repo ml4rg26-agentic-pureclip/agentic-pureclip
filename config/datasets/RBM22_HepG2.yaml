@@ -1,0 +1,90 @@
+run_id: RBM22_HepG2_iter_00
+dataset_id: RBM22_HepG2
+target_protein: RBM22
+cell_line: HepG2
+clip_protocol: eCLIP
+samples:
+  ip:
+    rep1:
+      bam: data/RBM22_HepG2/bam/ip_rep1_v1/ENCFF051SNH.bam
+    rep2:
+      bam: data/RBM22_HepG2/bam/ip_rep2_v1/ENCFF169EKN.bam
+  input_control:
+    rep1:
+      bam: data/RBM22_HepG2/bam/smi_v1/ENCFF615UKX.bam
+reference:
+  genome_fasta: data/GRCh38.primary_assembly.genome.fa/GRCh38.primary_assembly.genome.fa
+  annotation_gtf: null
+priors:
+  target_protein: RBM22
+  clip_protocol: eCLIP
+  expected_footprint_width_nt: 9
+  known_motifs:
+  - pattern: GTGGTGCCCCG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.RBM22.0
+    consensus: GTGGTGCCCCG
+  - pattern: GGGTGAGTGGG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.RBM22.1
+    consensus: GGGTGAGTGGG
+  - pattern: TTTCCCGGGGG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.RBM22.2
+    consensus: TTTCCCGGGGG
+  - pattern: TGCCCGGGGGG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.RBM22.3
+    consensus: TGCCCGGGGGG
+  - pattern: TGTGAGTGCTG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.RBM22.4
+    consensus: TGTGAGTGCTG
+  - pattern: GGGGTGAGTGG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.RBM22.5
+    consensus: GGGGTGAGTGG
+  - pattern: TTGGGGTCCCG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.RBM22.6
+    consensus: TTGGGGTCCCG
+  - pattern: GGGGCCGGGGG
+    type: target
+    source_database: mCrossBase
+    motif_id: HepG2.RBM22.7
+    consensus: GGGGCCGGGGG
+  primary_objective_metric: replicate_agreement
+pureclip:
+  bandwidth_nt: 50
+  merge_distance_nt: 8
+  high_precision_mode: false
+  use_input_covariate: true
+  use_cl_motif_covariate: false
+  cl_motif_file: null
+postprocessing:
+  force_width: 9
+  cluster_gap_width: 8
+  min_region_length_nt: 3
+  min_crosslink_events: 3
+reproducibility:
+  percentile_threshold: 10
+  min_crosslink_events_floor: 2
+  min_replicates_passing: 2
+benchmark:
+  top_regions_bed: data/RBM22_HepG2/top_regions/regions.bed6
+  top_crosslinks_bed: data/RBM22_HepG2/top_crosslink_sites/crosslinks.bed6
+  top_genes: data/RBM22_HepG2/top_genes/list.txt
+  biotypes_tsv: data/RBM22_HepG2/biotypes_genetypes/biotypes_proportions.tsv
+  genotypes_tsv: data/RBM22_HepG2/biotypes_genetypes/genetypes_proportions.tsv
+output:
+  results_dir: results/datasets/RBM22_HepG2
+resources:
+  max_memory_gb: 16
+  threads: 8
