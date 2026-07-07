@@ -4,8 +4,8 @@ import json
 # ChatOpenAI is constructed at import time; give it a dummy key.
 os.environ.setdefault("DEEPSEEK_API_KEY", "dummy_key_for_tests")
 
-import agent.graph as g
-from pipeline.datasets import dataset_to_config
+import agentic_pureclip.loop.graph as g
+from agentic_pureclip.pipeline.datasets import dataset_to_config
 
 
 def _state():

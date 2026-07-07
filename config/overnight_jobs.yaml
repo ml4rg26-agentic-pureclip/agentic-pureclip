@@ -1,4 +1,4 @@
-# Job manifest for scripts/overnight_batch.py — a long, failure-tolerant batch
+# Job manifest for scripts/run/overnight_batch.py — a long, failure-tolerant batch
 # meant to run ~8h unattended and leave a clean database to analyze afterwards.
 #
 # `defaults` apply to every job; each job may override any of them.

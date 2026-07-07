@@ -3,7 +3,7 @@
 # within 24h; full-genome confirmation of the best configs is a separate follow-up.
 #
 # Launch:
-#   uv run python scripts/batch_runner.py --manifest config/new_batch_runs.yaml --parallel 4
+#   uv run python scripts/run/batch_runner.py --manifest config/new_batch_runs.yaml --parallel 4
 # threads=8 x parallel=4 packs the 32-core runner.
 
 runs:

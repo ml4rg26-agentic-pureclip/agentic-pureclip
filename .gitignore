@@ -11,6 +11,7 @@
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv/
 
 # ==============================
 # Environment & Secrets
@@ -36,12 +37,11 @@ logs/
 # Data, References & Results
 # ==============================
 # These directories contain massive BAM/FASTA files and should be generated 
-# locally by running scripts/setup_chr21_bams.sh instead of tracking in Git.
+# locally by running scripts/data/setup_chr21_bams.sh instead of tracking in Git.
 data/
 ref/
 results/
 results_mock/
-docs/
 
 # UI-scheduled run manifests (generated)
 config/ui_runs/

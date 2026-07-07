@@ -1,13 +1,13 @@
 import pytest
 
-from pipeline.configs import (
+from agentic_pureclip.pipeline.configs import (
     ConfigValidationError,
     DEFAULT_SEARCH_BOUNDS,
     apply_decision_changes,
     load_config,
     validate_config,
 )
-from pipeline.datasets import dataset_to_config, list_datasets
+from agentic_pureclip.pipeline.datasets import dataset_to_config, list_datasets
 
 
 def test_default_config_validates():

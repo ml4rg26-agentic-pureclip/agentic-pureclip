@@ -1,8 +1,8 @@
-# LLM-vs-Optuna comparison manifest for scripts/overnight_batch.py.
+# LLM-vs-Optuna comparison manifest for scripts/run/overnight_batch.py.
 # Same dataset, same evaluation, same objective and bounds, matched trial budget
 # — only the search strategy differs (optimizer: llm | optuna).
 #
-#   PYTHONPATH=. uv run python scripts/overnight_batch.py \
+#   PYTHONPATH=. uv run python scripts/run/overnight_batch.py \
 #       --manifest config/compare_jobs.yaml --hours 8 \
 #       --pureclip-dir /vol/storage1/johannes/projects
 

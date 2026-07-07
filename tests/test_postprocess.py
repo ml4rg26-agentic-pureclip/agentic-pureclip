@@ -1,18 +1,11 @@
-"""Regression tests for workflow/postprocess.py — the cluster_gap_width merge
-and the crosslink-summit centring (both were previously dead / midpoint-only)."""
-import importlib.util
-from pathlib import Path
-
+"""Regression tests for agentic_pureclip.postprocess.postprocess — the
+cluster_gap_width merge and the crosslink-summit centring (both were previously
+dead / midpoint-only)."""
 import pandas as pd
 import pytest
 import yaml
 
-# Load workflow/postprocess.py directly (workflow/ is not an importable package).
-_spec = importlib.util.spec_from_file_location(
-    "postprocess", Path(__file__).resolve().parents[1] / "workflow" / "postprocess.py"
-)
-postprocess = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(postprocess)
+from agentic_pureclip.postprocess import postprocess
 
 
 def _regions(rows):

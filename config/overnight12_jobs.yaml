@@ -3,7 +3,7 @@
 # graceful partial-recording handle any overrun (RBFOX2_HepG2 is last as it
 # already performs well). Optuna gets a few more trials (it benefits from budget).
 #
-#   PYTHONPATH=. uv run python scripts/overnight_batch.py \
+#   PYTHONPATH=. uv run python scripts/run/overnight_batch.py \
 #       --manifest config/overnight12_jobs.yaml --hours 12 --no-repeat \
 #       --pureclip-dir /vol/storage1/johannes/projects
 

@@ -1,7 +1,7 @@
 # Agentic PureCLIP — UI
 
 A React Router (SPA) frontend for the agentic-PureCLIP monitor. It polls the
-monitor's JSON API (`/api/status`, served by `scripts/monitor.py`) and renders:
+monitor's JSON API (`/api/status`, served by `scripts/dashboard/monitor.py`) and renders:
 
 - **Dashboard** — active run + pipeline stepper, batch queue & ETA, per-dataset
   optimisation trajectories, and the LLM-vs-Optuna head-to-head.

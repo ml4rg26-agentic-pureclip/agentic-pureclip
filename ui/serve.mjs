@@ -1,7 +1,7 @@
 // Production server for the Agentic PureCLIP dashboard.
 //
 // Serves the built SPA (build/client) and reverse-proxies /api/* to the Python
-// JSON backend (scripts/monitor.py). Dependency-free — plain Node built-ins —
+// JSON backend (scripts/dashboard/monitor.py). Dependency-free — plain Node built-ins —
 // so the runner needs no `npm install`, just `node serve.mjs`.
 //
 //   PORT=8888 API_TARGET=http://localhost:8890 node serve.mjs

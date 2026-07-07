@@ -7,13 +7,15 @@ from pathlib import Path
 import os
 import yaml
 
+from agentic_pureclip.pipeline.runner import SNAKEFILE
+
 def test_snakemake_dry_run(tmp_path):
     """Test that the Snakemake workflow can successfully perform a dry run."""
     if not shutil.which("snakemake"):
         pytest.skip("snakemake not found in PATH")
-        
-    snakefile_path = Path("workflow/Snakefile")
-    assert snakefile_path.exists(), "Snakefile not found at workflow/Snakefile"
+
+    snakefile_path = Path(SNAKEFILE)
+    assert snakefile_path.exists(), f"Snakefile not found at {SNAKEFILE}"
     
     # Create dummy source files in tmp_path to satisfy Snakemake's dry run input requirements
     dummy_files = [

@@ -154,16 +154,16 @@ CONFIG_PATH=config/run_config.yaml MAX_ITER=8 PYTHONPATH=. uv run python agent/g
 CONFIG_PATH=config/run_config.yaml MAX_ITER=12 PYTHONPATH=. uv run python agent/optuna_runner.py
 
 # failure-tolerant batch (CLI; also what the UI "Plan run" page generates)
-PYTHONPATH=. uv run python scripts/overnight_batch.py \
+PYTHONPATH=. uv run python scripts/run/overnight_batch.py \
     --manifest config/bigrun2_jobs.yaml --hours 12 --no-repeat \
     --pureclip-dir /vol/storage1/johannes/projects
 
 # simple manifest batch (per-dataset preliminary runs; results/batch/_summary.tsv)
-PYTHONPATH=. uv run python scripts/batch_runner.py \
+PYTHONPATH=. uv run python scripts/run/batch_runner.py \
     --manifest config/new_batch_runs.yaml --parallel 4
 
 # dashboard + API (serves the React build if ui/build/client exists)
-PYTHONPATH=. uv run python scripts/monitor.py --port 8888
+PYTHONPATH=. uv run python scripts/dashboard/monitor.py --port 8888
 ```
 
 `learn_on_chr21: true` restricts PureCLIP to chr21 — "fast mode", ~minutes/iter
@@ -196,7 +196,7 @@ changed + reasoning, from `decisions.jsonl`), **Plan run** (pick dataset, params
   ```bash
   ssh bio 'cd /vol/storage1/johannes/projects/agentic-pureclip; \
     export PATH=/vol/storage1/johannes/projects:$HOME/.local/bin:$PATH; \
-    PYTHONPATH=. nohup uv run python scripts/batch_runner.py \
+    PYTHONPATH=. nohup uv run python scripts/run/batch_runner.py \
       --manifest config/rerun_hnrnpk.yaml --parallel 2 \
       > logs/rerun_hnrnpk.log 2>&1 &'
   ```
@@ -208,7 +208,7 @@ changed + reasoning, from `decisions.jsonl`), **Plan run** (pick dataset, params
   fire-and-forget.
 - View the dashboard locally: `ssh -f -N -L 8888:localhost:8888 bio` then
   http://localhost:8888. If the page is stale, the tunnel often died — kill and
-  re-establish it. `scripts/monitor.py --port 8888` is the backend.
+  re-establish it. `scripts/dashboard/monitor.py --port 8888` is the backend.
 - Result stores (all gitignored, runner-only): `results/batch/` (from
   `batch_runner.py`: per-run `<id>_<ts>/` dirs with `decisions.jsonl` +
   per-iteration `score_report.json`, plus `_summary.tsv`) and `results/overnight/`
