@@ -19,12 +19,12 @@ import json
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from agentic_pureclip.pipeline.configs import DEFAULT_SEARCH_BOUNDS
 from agentic_pureclip.pipeline.datasets import list_datasets
 
-from . import collectors
+from . import collectors, report
 from .collectors import DEFAULT_OBJECTIVE_WEIGHTS
 
 app = FastAPI(title="Agentic PureCLIP Dashboard API")
@@ -73,6 +73,27 @@ def run_sites(dataset: str = "") -> Response:
         return JSONResponse(
             {"error": str(exc), "dataset": dataset, "sites": []}, status_code=500
         )
+
+
+@app.get("/api/report")
+def report_html(dataset: str = "", download: bool = True) -> Response:
+    """Standalone HTML analysis report for a dataset's optimisation run.
+
+    ?download=false serves it inline (preview in a tab); default downloads a file.
+    """
+    if not dataset:
+        return JSONResponse({"error": "missing ?dataset="}, status_code=400)
+    try:
+        result = report.render_html(dataset)
+    except Exception as exc:
+        return JSONResponse({"error": str(exc), "dataset": dataset}, status_code=500)
+    if result is None:
+        return JSONResponse(
+            {"error": f"no scored iterations found for {dataset!r}"}, status_code=404
+        )
+    filename, html = result
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'} if download else {}
+    return HTMLResponse(content=html, headers=headers)
 
 
 @app.post("/api/schedule")

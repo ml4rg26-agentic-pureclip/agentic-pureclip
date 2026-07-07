@@ -213,7 +213,16 @@ function DatasetReport({ exp, runs }: { exp: Experiment; runs: Run[] }) {
             <b style={{ color: "var(--green)" }}>{fmt(exp.best_composite)}</b>
           </span>
         </div>
-        <button className="btn-pdf no-print" onClick={() => window.print()}>⬇ Export PDF</button>
+        <div className="report-actions no-print">
+          <button className="btn-pdf" onClick={() => window.print()}>⬇ Export PDF</button>
+          <a
+            className="btn-pdf"
+            href={`${API_BASE}/api/report?dataset=${encodeURIComponent(exp.name)}`}
+            title="Download a standalone HTML analysis report (best iteration, convergence, per-iteration history)"
+          >
+            ⬇ Full report
+          </a>
+        </div>
       </div>
 
       {/* KPI strip */}

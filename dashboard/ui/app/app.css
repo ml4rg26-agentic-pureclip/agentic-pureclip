@@ -324,8 +324,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .report-cell { font-size: 12px; margin-left: 9px; padding: 2px 9px; border-radius: 10px;
   background: var(--card2); border: 1px solid var(--border); color: var(--muted); vertical-align: middle; }
 .report-sub { display: block; font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+.report-actions { display: flex; gap: 8px; align-items: center; }
 .btn-pdf { background: var(--card2); border: 1px solid var(--border); color: var(--text);
-  border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; }
 .btn-pdf:hover { border-color: var(--accent); color: #fff; }
 
 .report-kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 18px; }
