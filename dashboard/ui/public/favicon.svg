@@ -1,15 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect width="32" height="32" rx="7" fill="#0d1117"/>
-  <g fill="none" stroke-linecap="round">
-    <!-- base-pair rungs (drawn behind the strands) -->
-    <g stroke="#3fb950" stroke-width="1.8">
-      <line x1="13" y1="7"  x2="19" y2="7"/>
-      <line x1="13" y1="13" x2="19" y2="13"/>
-      <line x1="13" y1="19" x2="19" y2="19"/>
-      <line x1="13" y1="25" x2="19" y2="25"/>
-    </g>
-    <!-- two intertwined helix strands -->
-    <path d="M16 4 Q22 7 16 10 Q10 13 16 16 Q22 19 16 22 Q10 25 16 28" stroke="#58a6ff" stroke-width="2.3"/>
-    <path d="M16 4 Q10 7 16 10 Q22 13 16 16 Q10 19 16 22 Q22 25 16 28" stroke="#58a6ff" stroke-width="2.3"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <text x="50" y="52" font-size="86" text-anchor="middle" dominant-baseline="central">🧬</text>
 </svg>
