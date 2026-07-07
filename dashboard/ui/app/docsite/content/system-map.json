@@ -235,21 +235,20 @@
     },
     {
       "id": "monitor_api",
-      "name": "Monitor + REST API (scripts/dashboard/monitor.py)",
+      "name": "Dashboard REST API (dashboard/api, FastAPI)",
       "category": "Service",
-      "description": "Python stdlib HTTP server exposing a REST API over the results/overnight/ output files and serving the compiled React SPA. Imports composite_objective directly so dashboard scores are always computed with the live objective formula.",
+      "description": "FastAPI backend (uvicorn) exposing a JSON REST API over the results/overnight/ output files. Data only — the React SPA is a separate service. Imports composite_objective directly so dashboard scores are always computed with the live objective formula.",
       "inputs": [
         "results/overnight/iterations.jsonl",
         "results/overnight/jobs.jsonl",
-        "results/overnight/summary.csv",
-        "ui/build/client/ (static SPA assets)"
+        "results/overnight/summary.csv"
       ],
       "outputs": [
         "GET /api/runs: list of all runs with best scores and metadata",
-        "GET /api/run/<id>: iteration-level details for one run",
         "GET /api/status: active job and queue state",
-        "POST /api/schedule: enqueue a new job",
-        "Static SPA serving on /"
+        "GET /api/options: datasets, parameter bounds, objective weights",
+        "GET /api/run_sites?dataset=<id>: binding sites for a dataset's best run",
+        "POST /api/schedule: enqueue a new job"
       ],
       "adjustable_parameters": [
         "--port (default 8888)"
@@ -257,9 +256,9 @@
     },
     {
       "id": "dashboard_ui",
-      "name": "Dashboard UI (ui/)",
+      "name": "Dashboard UI (dashboard/ui)",
       "category": "UI",
-      "description": "React Router v8 SPA with four pages. Built with React 19, Tailwind CSS v4, and Vite. In development proxies /api to monitor.py; in production served as a static build by monitor.py.",
+      "description": "React Router v8 SPA with four pages. Built with React 19, Tailwind CSS v4, and Vite. In development the Vite proxy forwards /api to the dashboard/api FastAPI backend; in production served as a static build.",
       "inputs": ["monitor_api REST endpoints"],
       "outputs": ["Browser-rendered experiment dashboard"],
       "adjustable_parameters": [],

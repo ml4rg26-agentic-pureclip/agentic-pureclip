@@ -1,31 +1,26 @@
-#!/usr/bin/env python3
 """
-Live monitoring dashboard for agentic PureCLIP optimisation runs.
+Data collectors for the agentic PureCLIP monitoring dashboard.
 
-Start on the remote server:
-    PYTHONPATH=. uv run python scripts/dashboard/monitor.py --port 8888
+These functions read the live pipeline state off the filesystem and running
+processes — the active run's dataset, current iteration and pipeline stage, the
+tunable parameters in flight, the live optimisation metrics (replicate
+agreement, motif hit-rate, motif enrichment, composite objective) and the
+agent's latest reasoning, plus the full per-dataset iteration trajectory.
 
-Then open in browser (tunnel):
-    ssh -L 8888:localhost:8888 bio   →   http://localhost:8888
-
-The dashboard is science-oriented: it shows the active run's dataset, current
-iteration and pipeline stage, the tunable parameters in flight, the live
-optimisation metrics (replicate agreement, motif hit-rate, motif enrichment,
-composite objective) and the agent's latest reasoning — plus the full
-per-dataset iteration trajectory.
+They are pure Python (no web framework); `dashboard.api.main` exposes them over
+HTTP as the FastAPI `/api/*` endpoints. All paths are relative to the repo root,
+so the API must be launched with the repo root as the working directory.
 """
 
 from __future__ import annotations
 
 import json
-import mimetypes
 import os
 import re
 import subprocess
 import sys
 import time
 from pathlib import Path
-from http.server import HTTPServer, BaseHTTPRequestHandler
 
 import yaml
 
@@ -99,7 +94,7 @@ def get_processes() -> list[dict]:
         if len(parts) < 5:
             continue
         pid, pcpu, pmem, etime, args = parts
-        if "monitor.py" in args or " grep " in args:
+        if "dashboard.api" in args or " grep " in args:
             continue
         if not any(k in args for k in keys):
             continue
@@ -702,7 +697,7 @@ def _run_active() -> bool:
     except Exception:
         return False
     for line in out.splitlines():
-        if "monitor.py" in line:
+        if "dashboard.api" in line:
             continue
         if any(k in line for k in HEAVY_PROC_KEYS):
             return True
@@ -807,141 +802,3 @@ def schedule_run(spec: dict) -> tuple[int, dict]:
         "message": f"Scheduled {optimizer.upper()} run on {dataset} "
                    f"({max_iter} iters, optimizing {n_params} parameter(s)).",
     }
-
-
-# Built React SPA (ui/build/client) — the only frontend. Build it with
-# `cd ui && npm run build`; this server just exposes the /api/* endpoints and
-# serves that build.
-UI_DIST = Path("ui/build/client")
-
-
-class MonitorHandler(BaseHTTPRequestHandler):
-    def log_message(self, *args):  # silence default logging
-        pass
-
-    def _send_file(self, path: Path, status: int = 200) -> None:
-        ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
-        data = path.read_bytes()
-        self.send_response(status)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
-
-    def _serve_spa(self) -> bool:
-        """Serve a static asset, or fall back to index.html for client routes."""
-        rel = self.path.split("?", 1)[0].lstrip("/")
-        root = UI_DIST.resolve()
-        candidate = (root / rel).resolve()
-        is_inside = candidate == root or root in candidate.parents
-        if rel and is_inside and candidate.is_file():
-            self._send_file(candidate)
-            return True
-        index = UI_DIST / "index.html"
-        if index.is_file():
-            self._send_file(index)  # SPA fallback (client-side routing)
-            return True
-        return False
-
-    def _json(self, status: int, obj: dict) -> None:
-        payload = json.dumps(obj).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Content-Length", str(len(payload)))
-        self.end_headers()
-        self.wfile.write(payload)
-
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
-
-    def do_POST(self):
-        if self.path == "/api/schedule":
-            length = int(self.headers.get("Content-Length", 0) or 0)
-            raw = self.rfile.read(length) if length else b"{}"
-            try:
-                spec = json.loads(raw or b"{}")
-            except Exception:
-                self._json(400, {"ok": False, "error": "invalid JSON body"})
-                return
-            try:
-                code, result = schedule_run(spec)
-            except Exception as exc:  # never crash the server on a bad request
-                code, result = 500, {"ok": False, "error": str(exc)}
-            self._json(code, result)
-            return
-        self.send_response(404)
-        self.end_headers()
-
-    def do_GET(self):
-        if self.path == "/api/status":
-            self._json(200, build_status())
-            return
-        if self.path == "/api/options":
-            self._json(200, {
-                "datasets": list_datasets(),
-                "bounds": DEFAULT_SEARCH_BOUNDS,
-                "weights": DEFAULT_OBJECTIVE_WEIGHTS,
-                "run_active": _run_active(),
-            })
-            return
-        if self.path == "/api/runs":
-            self._json(200, {"runs": collect_runs()})
-            return
-        if self.path.startswith("/api/run_sites"):
-            from urllib.parse import urlparse, parse_qs
-            q = parse_qs(urlparse(self.path).query)
-            dataset = (q.get("dataset") or [""])[0]
-            if not dataset:
-                self._json(400, {"error": "missing ?dataset="})
-                return
-            try:
-                self._json(200, collect_run_sites(dataset))
-            except Exception as exc:
-                self._json(500, {"error": str(exc), "dataset": dataset, "sites": []})
-            return
-        # Serve the built React SPA (ui/build/client).
-        if UI_DIST.exists() and self._serve_spa():
-            return
-        if self.path in ("/", "/index.html"):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(
-                (
-                    "<!doctype html><meta charset=utf-8>"
-                    "<body style='font:14px system-ui;max-width:40em;margin:4em auto'>"
-                    "<h2>UI build not found</h2>"
-                    "<p>The dashboard now lives entirely in <code>ui/</code>. "
-                    "Build it once with <code>cd ui &amp;&amp; npm install &amp;&amp; npm run build</code>, "
-                    "then reload — this server will serve <code>ui/build/client</code>.</p>"
-                ).encode()
-            )
-            return
-        self.send_response(404)
-        self.end_headers()
-
-
-def main():
-    import argparse
-    parser = argparse.ArgumentParser(description="Science dashboard for agentic PureCLIP runs")
-    parser.add_argument("--port", type=int, default=8888)
-    parser.add_argument("--host", default="0.0.0.0")
-    args = parser.parse_args()
-
-    server = HTTPServer((args.host, args.port), MonitorHandler)
-    print(f"Monitor running at http://localhost:{args.port}")
-    print(f"  Tunnel: ssh -L {args.port}:localhost:{args.port} bio")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        print("\nShutting down.")
-        server.shutdown()
-
-
-if __name__ == "__main__":
-    main()

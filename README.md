@@ -72,15 +72,18 @@ uv run python scripts/run/overnight_batch.py \
     --pureclip-dir /vol/storage1/johannes/projects
 ```
 
-### Dashboard + UI
+### Dashboard
 
-`scripts/dashboard/monitor.py` serves a JSON API (`/api/status`, `/api/runs`,
-`/api/options`, `POST /api/schedule`) and the built React UI.
+Two independent services under `dashboard/`:
+
+- **`dashboard/api/`** — FastAPI backend serving JSON only (`/api/status`,
+  `/api/runs`, `/api/options`, `POST /api/schedule`). Run it from the repo root.
+- **`dashboard/ui/`** — React Router SPA; in dev the Vite proxy forwards `/api`
+  to the backend (`MONITOR_API`, default `http://localhost:8888`).
 
 ```bash
-uv run python scripts/dashboard/monitor.py --port 8888                   # backend + UI
-cd ui && npm install && npm run dev                            # UI dev (proxies /api)
-cd ui && npm run build                                         # SPA → ui/build/client
+uv run uvicorn dashboard.api.main:app --host 0.0.0.0 --port 8888   # data API
+cd dashboard/ui && npm install && npm run dev                      # UI dev (proxies /api)
 ```
 
 UI pages: **Dashboard** (active run, queue/ETA, leaderboard with LLM-vs-Optuna
@@ -110,8 +113,8 @@ separate under `pipeline/`.
 | `src/agentic_pureclip/scoring/` | **Quality signals + objective.** `run_scorers.py` (reproducibility, motif, recall) and `objective.py` (`composite_objective`, weights, prompt) |
 | `src/agentic_pureclip/postprocess/` | **Standardized footprint.** `postprocess.py` (filter/format PureCLIP output) + the `Snakefile` that drives the pipeline |
 | `src/agentic_pureclip/pipeline/` | Plumbing: `configs.py` (bounds/validation), `datasets.py`, `motifs.py` (PWM log-odds), `runner.py` (invokes Snakemake), `logging_config.py` |
-| `scripts/` | Ops utilities grouped by purpose: `data/` (download + prepare datasets), `motifs/` (motif library), `run/` (`batch_runner.py`, `overnight_batch.py`), `dashboard/` (`monitor.py` backend + `start_ui.sh`) |
-| `ui/` | React Router SPA |
+| `scripts/` | Ops utilities grouped by purpose: `data/` (download + prepare datasets), `motifs/` (motif library), `run/` (`batch_runner.py`, `overnight_batch.py`) |
+| `dashboard/` | The live dashboard: `api/` (FastAPI data provider) + `ui/` (React Router SPA), each independently runnable |
 | `config/` | run configs, dataset configs, batch manifests, priors |
 | `tests/` | pytest suite |
 | `docs/` | architecture notes, meeting artifacts, and the LaTeX thesis (`docs/report/`) |
