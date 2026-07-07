@@ -42,7 +42,7 @@ Both run the same `evaluate_config` function, making their results directly comp
                         │  results written to results/overnight/
                         ▼
 ┌───────────────────────────────────────────────────────────────┐
-│          Monitoring & UI (scripts/dashboard/monitor.py + ui/)            │
+│        Monitoring & UI (dashboard/api FastAPI + dashboard/ui)  │
 │  REST API + React SPA: Dashboard · Runs · Plan run · Variables │
 └───────────────────────────────────────────────────────────────┘
 ```
@@ -95,14 +95,19 @@ Operational tooling for running experiments and managing data.
 | File | Responsibility |
 |---|---|
 | `overnight_batch.py` | Failure-tolerant batch runner. Executes a list of jobs from a YAML manifest within a wall-clock budget, never aborts on a single failure, records all outcomes to `results/overnight/`. |
-| `monitor.py` | HTTP server (stdlib `http.server`) that exposes a REST API over `results/overnight/` and serves the compiled React SPA. This is the production entry point for the dashboard. |
 | `download_data.sh` / `download_genome.sh` | Download eCLIP BAMs from ENCODE and the GRCh38 genome FASTA. |
 | `setup_chr21_bams.sh` / `extract_chromosome.sh` | Subset BAMs to chr21 for fast iteration (`learn_on_chr21: true`). |
 | `write_dataset_config.py` | Helper to generate `config/datasets/*.yaml` entries. |
 | `list_motifs.py` / `reorganize_motifs.py` | Utilities for managing the motif file library under `data/motifs/`. |
 | `batch_runner.py` | Earlier batch runner prototype (superseded by `overnight_batch.py`). |
 
-### `ui/`
+### `dashboard/api/`
+FastAPI backend (uvicorn) that exposes a REST API over `results/` and `config/`.
+`main.py` defines the `/api/*` routes; `collectors.py` does the filesystem/process
+data collection. Data only — the UI is a separate service. Run from the repo root:
+`uv run uvicorn dashboard.api.main:app --port 8888`.
+
+### `dashboard/ui/`
 React Router v8 single-page application providing the experiment dashboard.
 
 | Path | Responsibility |
@@ -113,7 +118,7 @@ React Router v8 single-page application providing the experiment dashboard.
 | `app/routes/variables.tsx` | Plain-English guide to all tunable parameters and their effects. |
 | `app/lib/` | Shared API fetch helpers, type definitions. |
 
-Built with React 19, React Router 8, Tailwind CSS v4, and Vite. Production build (`npm run build`) produces `ui/build/client/` which `monitor.py` serves statically.
+Built with React 19, React Router 8, Tailwind CSS v4, and Vite. In dev the Vite proxy forwards `/api` to the `dashboard/api` backend; the production build (`npm run build`) produces `build/client/` served as a static SPA (its own container, or any static host).
 
 ### `config/`
 Run configuration files — not code, but part of the reproducible experiment record.
@@ -148,13 +153,13 @@ CI: `pytest.yml` runs the test suite on push/PR (`DEEPSEEK_API_KEY=dummy`).
 composite = (0.5·reproducibility + 0.25·motif + 0.25·recall)   # renormalised over present terms
             × min(1, n_binding_sites / 10)                       # collapse guard
 ```
-Weights are configurable via `priors.json`. The formula lives in `agent/decisions.py` and is imported by `monitor.py` so the dashboard always reflects the live objective.
+Weights are configurable via `priors.json`. The formula lives in `agentic_pureclip.scoring.objective` and is imported by the dashboard API (`dashboard/api/collectors.py`) so the dashboard always reflects the live objective.
 
 ### Overnight batch
 `overnight_batch.py` iterates through a YAML manifest of jobs, launches each as a subprocess, enforces a wall-clock budget, and writes `iterations.jsonl`, `jobs.jsonl`, and `summary.csv` under `results/overnight/`.
 
 ### Dashboard
-`monitor.py` serves the API at `/api/*` by reading the JSONL/CSV files from `results/overnight/`. The React SPA polls these endpoints and renders the live experiment state.
+The FastAPI backend (`dashboard/api`) serves the API at `/api/*` by reading the JSONL/CSV files from `results/overnight/`. The React SPA (`dashboard/ui`) polls these endpoints and renders the live experiment state.
 
 ---
 

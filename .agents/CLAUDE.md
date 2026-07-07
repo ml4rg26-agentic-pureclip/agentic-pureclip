@@ -128,9 +128,10 @@ is `DEFAULT_MIN_SITES` (10).
 - `scripts/` — `overnight_batch.py` (failure-tolerant, wall-clock-budgeted batch
   runner), `batch_runner.py` (simpler manifest runner: `--manifest`/`--parallel`,
   one `agent.graph` subprocess per run, appends `results/batch/_summary.tsv`),
-  `monitor.py` (dashboard backend + API + UI server), data download helpers.
-- `ui/` — React Router SPA (Dashboard, Runs, Plan run, Variables). Consumes the
-  monitor API; served by `monitor.py` in production.
+  data download helpers.
+- `dashboard/api/` — FastAPI backend (uvicorn) serving the `/api/*` JSON data.
+- `dashboard/ui/` — React Router SPA (Dashboard, Runs, Plan run, Variables);
+  calls the `dashboard/api` backend over `/api/*`.
 - `config/` — `run_config.yaml`, dataset configs, batch manifests, `priors.json`.
 - `tests/` — pytest suite (objective, PWM scoring, agent resilience, Optuna).
 
@@ -162,17 +163,17 @@ PYTHONPATH=. uv run python scripts/run/overnight_batch.py \
 PYTHONPATH=. uv run python scripts/run/batch_runner.py \
     --manifest config/new_batch_runs.yaml --parallel 4
 
-# dashboard + API (serves the React build if ui/build/client exists)
-PYTHONPATH=. uv run python scripts/dashboard/monitor.py --port 8888
+# dashboard data API (FastAPI; run from the repo root)
+uv run uvicorn dashboard.api.main:app --host 0.0.0.0 --port 8888
 ```
 
 `learn_on_chr21: true` restricts PureCLIP to chr21 — "fast mode", ~minutes/iter
 instead of hours; used for all batch experiments.
 
-### UI (ui/)
+### UI (dashboard/ui/)
 ```bash
-cd ui && npm install && npm run dev        # http://localhost:5173 (proxies /api → monitor)
-npm run build                              # SPA → ui/build/client (served by monitor.py)
+cd dashboard/ui && npm install && npm run dev   # http://localhost:5173 (proxies /api → backend)
+npm run build                                    # SPA → build/client/
 ```
 Pages: **Dashboard** (active run + stepper, queue/ETA, results leaderboard with
 LLM-vs-Optuna head-to-head), **Runs** (per-iteration decision trail: params
@@ -206,9 +207,11 @@ changed + reasoning, from `decisions.jsonl`), **Plan run** (pick dataset, params
   `agent` packages. Prefer **tmux** for anything long-lived (a bare `&` over a
   non-detached SSH channel can hang it); `nohup … &` with a redirect works for
   fire-and-forget.
-- View the dashboard locally: `ssh -f -N -L 8888:localhost:8888 bio` then
-  http://localhost:8888. If the page is stale, the tunnel often died — kill and
-  re-establish it. `scripts/dashboard/monitor.py --port 8888` is the backend.
+- View the dashboard locally: tunnel the API with
+  `ssh -f -N -L 8888:localhost:8888 bio`, then run the UI locally
+  (`cd dashboard/ui && npm run dev` → http://localhost:5173, proxies `/api` →
+  the tunnel). If data is stale, the tunnel often died — kill and re-establish
+  it. `uv run uvicorn dashboard.api.main:app --port 8888` is the backend.
 - Result stores (all gitignored, runner-only): `results/batch/` (from
   `batch_runner.py`: per-run `<id>_<ts>/` dirs with `decisions.jsonl` +
   per-iteration `score_report.json`, plus `_summary.tsv`) and `results/overnight/`

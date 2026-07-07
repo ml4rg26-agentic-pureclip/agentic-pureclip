@@ -28,6 +28,8 @@ dependencies:
       - pydantic>=2.0
       - pyyaml
       - pandas
+      - fastapi>=0.110
+      - uvicorn>=0.29
       # Install the project itself (src/agentic_pureclip) editable so the
       # `agentic_pureclip` package and its `python -m` entry points resolve.
       - -e .

@@ -18,6 +18,8 @@ dependencies = [
     "pandas",
     "matplotlib>=3.8.0",
     "langchain-google-genai>=2.0.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
 ]
 
 [build-system]

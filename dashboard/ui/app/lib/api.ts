@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
-// In dev the Vite proxy forwards /api -> the monitor backend. Override the base
-// (e.g. for a static build hitting a remote monitor) with VITE_API_BASE.
+// In dev the Vite proxy forwards /api -> the FastAPI backend (dashboard/api).
+// For a standalone build hitting a remote API, set VITE_API_BASE at build time.
 const API_BASE = import.meta.env.VITE_API_BASE ?? "";
 
 export interface Params {

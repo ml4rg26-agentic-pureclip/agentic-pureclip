@@ -24,10 +24,9 @@ Run them from the repo root. Grouped by purpose:
 - **`batch_runner.py`**: Run multiple agent runs defined in a manifest (e.g. `config/batch_runs.yaml`).
 - **`overnight_batch.py`**: Failure-tolerant batch runner — runs many jobs back-to-back within a wall-clock budget, isolating failures.
 
-## `dashboard/` — live monitoring UI
-
-- **`monitor.py`**: Serves the JSON API (`/api/status`, `/api/runs`, `/api/options`, `POST /api/schedule`) and the built React UI.
-- **`start_ui.sh`**: Convenience launcher for `monitor.py` (intended to run inside a persistent tmux session).
+> The live monitoring dashboard moved out of `scripts/` — the FastAPI backend
+> and React UI now live under `dashboard/api/` and `dashboard/ui/`. See
+> [`dashboard/README.md`](../dashboard/README.md).
 
 ## Examples
 
@@ -35,5 +34,4 @@ Run them from the repo root. Grouped by purpose:
 bash scripts/data/setup_chr21_bams.sh
 python scripts/data/write_dataset_config.py RBFOX2_K562 --out config/datasets/RBFOX2_K562.yaml
 python scripts/motifs/list_motifs.py --rbp RBFOX2
-uv run python scripts/dashboard/monitor.py --port 8888
 ```
