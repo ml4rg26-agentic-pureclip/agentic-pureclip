@@ -22,8 +22,6 @@ matplotlib.use("Agg")  # headless
 import matplotlib.pyplot as plt  # noqa: E402
 from jinja2 import Template  # noqa: E402
 
-from . import collectors
-
 # Metrics surfaced as "Final Scores" cards, in display order, with labels.
 SCORE_FIELDS = [
     ("composite", "composite", True),
@@ -117,6 +115,8 @@ def build_history(dataset: str) -> tuple[dict, list[dict]]:
     history: [{iteration, run_id, mtime, scores{...+composite}, config{params}}]
     sorted by mtime — mirrors how the dashboard groups a dataset's trajectory.
     """
+    from . import collectors  # lazy: keeps the renderer importable without the pipeline package
+
     rows: list[dict] = []
     for root in collectors._result_roots():
         if not root.exists():
@@ -272,9 +272,16 @@ _TEMPLATE = Template(r"""<!DOCTYPE html>
 </div></body></html>""")
 
 
-def render_html(dataset: str) -> tuple[str, str] | None:
-    """Return (filename, html) for the dataset's report, or None if no data."""
-    meta, history = build_history(dataset)
+def render_report(meta: dict, history: list[dict]) -> tuple[str, str] | None:
+    """Render (filename, html) from an already-assembled (meta, history) pair.
+
+    Pure: no filesystem or pipeline access. ``build_history`` (used by the API)
+    and the standalone CLI both feed their assembled data in here.
+
+    meta:    {dataset, target_protein, cell_line, target_motif}
+    history: [{iteration, run_id, scores{...+composite}, config{params}}, ...]
+             ordered oldest → newest.
+    """
     if not history:
         return None
 
@@ -310,4 +317,10 @@ def render_html(dataset: str) -> tuple[str, str] | None:
         summary=summary,
         chart=_convergence_chart(history),
     )
-    return f"{dataset}_report.html", html
+    return f"{meta['dataset']}_report.html", html
+
+
+def render_html(dataset: str) -> tuple[str, str] | None:
+    """Return (filename, html) for the dataset's live report, or None if no data."""
+    meta, history = build_history(dataset)
+    return render_report(meta, history)

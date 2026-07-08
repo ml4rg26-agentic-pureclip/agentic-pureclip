@@ -1,0 +1,30 @@
+{
+  "dataset": "PUM2_K562",
+  "target_motif": "TGTANATA",
+  "reports": [
+    {
+      "run_id": "PUM2_K562_iter_01",
+      "n_binding_sites": 980,
+      "replicate_agreement": 0.61,
+      "motif_hit_rate": 0.28,
+      "benchmark_region_recall": 0.44,
+      "params": { "pureclip": { "bandwidth": 50, "dc": 4 } }
+    },
+    {
+      "run_id": "PUM2_K562_iter_02",
+      "n_binding_sites": 1150,
+      "replicate_agreement": 0.70,
+      "motif_hit_rate": 0.39,
+      "benchmark_region_recall": 0.52,
+      "params": { "pureclip": { "bandwidth": 30, "dc": 4 } }
+    },
+    {
+      "run_id": "PUM2_K562_iter_03",
+      "n_binding_sites": 1240,
+      "replicate_agreement": 0.75,
+      "motif_hit_rate": 0.46,
+      "benchmark_region_recall": 0.58,
+      "params": { "pureclip": { "bandwidth": 30, "dc": 6 } }
+    }
+  ]
+}
