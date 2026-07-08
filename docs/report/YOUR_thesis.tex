@@ -12,6 +12,11 @@
 % \scaffold{...}  marks bullet lists that are notes-to-self, not final prose.
 \newcommand{\TODO}[1]{\textcolor{red}{\textbf{[TODO]}~#1}}
 \newcommand{\scaffold}[1]{\textcolor{blue!55!black}{\textbf{Scaffold:}~\itshape #1}}
+% \alertbox{...}  amber "to investigate later" callout (visible in the PDF).
+\newcommand{\alertbox}[1]{%
+  \begin{center}\fcolorbox{orange!65!black}{orange!8}{%
+    \parbox{0.94\linewidth}{\small\textbf{$\triangleright$~To investigate (time permitting):}~#1}}%
+  \end{center}}
 
 \begin{document}
 \setlanguageEnglish
@@ -24,14 +29,11 @@
 \include{sections/4_results}
 \include{sections/5_discussion}
 \include{sections/6_conclusion}
-\include{sections/7_appendix}
-
-
 
 % Anhang / Appendix
 \appendix % Ab hier wird mit A, B, ... weiternummeriert.
 
-\include{sections/8_appendix}
+\include{sections/7_appendix}
 
 % Literaturverzeichnis
 \printbibliography

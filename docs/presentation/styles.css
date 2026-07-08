@@ -1,0 +1,256 @@
+/* ============================================================
+   PureCLIP optimization — presentation deck
+   Plain scientific style. 16:9 (1280×720) slides.
+   ============================================================ */
+
+:root {
+  --ink: #17242f;
+  --muted: #5c6b78;
+  --line: #d8e0e6;
+  --bg: #ffffff;
+  --panel: #f4f7f9;
+  --accent: #0b6e8c;      /* primary (also = LLM) */
+  --llm: #0b6e8c;
+  --opt: #c2622e;         /* Optuna */
+  --easy: #2e8b57;
+  --mid: #c99700;
+  --hard: #b03a48;
+  --w1: #0b6e8c;
+  --w2: #6a8a2b;
+  --w3: #8a5a2b;
+  --stageW: 1280px;
+  --stageH: 720px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: #2a3540;
+  font-family: "Helvetica Neue", Arial, "Segoe UI", sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Chrome (progress + controls) ---------- */
+.chrome {
+  position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; background: rgba(23,36,47,.92); color: #eaf1f5;
+}
+.progress { flex: 1; height: 4px; background: #3c4a56; border-radius: 3px; margin-right: 18px; }
+.progress-bar { height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width .25s; }
+.controls { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.controls button {
+  background: #33424e; color: #eaf1f5; border: 1px solid #46586620;
+  padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;
+}
+.controls button:hover { background: var(--accent); }
+.counter { color: #b8c6d0; min-width: 52px; text-align: right; }
+
+/* ---------- Viewport & stage scaling ---------- */
+.viewport {
+  position: fixed; inset: 44px 0 0 0;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.stage {
+  width: var(--stageW); height: var(--stageH);
+  transform-origin: center center;
+  position: relative;
+}
+
+/* ---------- Slides ---------- */
+.slide {
+  position: absolute; inset: 0;
+  background: var(--bg);
+  padding: 54px 64px 60px;
+  display: none; flex-direction: column;
+  border: 1px solid var(--line);
+}
+.slide.active { display: flex; }
+
+/* speaker color strip on the left edge */
+.slide::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 8px;
+}
+.slide[data-speaker="1"]::before { background: #0b6e8c; }
+.slide[data-speaker="2"]::before { background: #2e8b57; }
+.slide[data-speaker="3"]::before { background: #c2622e; }
+.slide[data-speaker="4"]::before { background: #6a4c93; }
+
+/* speaker badge bottom-right */
+.slide::after {
+  content: "Speaker " attr(data-speaker);
+  position: absolute; right: 22px; bottom: 16px;
+  font-size: 12px; letter-spacing: .04em; color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* ---------- Headings ---------- */
+.slide-head { border-bottom: 2px solid var(--line); padding-bottom: 12px; margin-bottom: 26px; }
+.tag {
+  display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--accent); margin-bottom: 6px;
+}
+h2 { font-size: 34px; font-weight: 700; line-height: 1.15; color: var(--ink); }
+h3 { font-size: 20px; font-weight: 700; margin-bottom: 8px; color: var(--ink); }
+
+/* ---------- Title slides ---------- */
+.slide-title { justify-content: center; align-items: flex-start; padding-left: 84px; }
+.slide-title .kicker { font-size: 15px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: 22px; }
+.slide-title h1 { font-size: 52px; line-height: 1.1; font-weight: 800; letter-spacing: -.01em; }
+.slide-title .subtitle { font-size: 22px; color: var(--muted); margin-top: 20px; max-width: 900px; }
+.slide-title .team { margin-top: 46px; font-size: 16px; color: var(--ink); line-height: 1.9; }
+.slide-title .team strong { display: inline-block; width: 108px; color: var(--muted); font-weight: 700; }
+
+/* ---------- Lists ---------- */
+ul.big { list-style: none; }
+ul.big li { position: relative; padding-left: 26px; margin-bottom: 18px; font-size: 21px; line-height: 1.4; }
+ul.big li::before { content: ""; position: absolute; left: 4px; top: 11px; width: 9px; height: 9px; background: var(--accent); border-radius: 2px; }
+
+/* ---------- Columns ---------- */
+.cols { display: flex; gap: 30px; flex: 1; }
+.cols.three .col { flex: 1; }
+.col { flex: 1; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; }
+.panel p { font-size: 17px; color: var(--ink); line-height: 1.45; }
+.accent-llm { border-top: 4px solid var(--llm); }
+.accent-opt { border-top: 4px solid var(--opt); }
+
+.footnote { margin-top: 20px; font-size: 17px; color: var(--muted); border-top: 1px dashed var(--line); padding-top: 14px; }
+.footnote.big-take { font-size: 20px; color: var(--ink); }
+.tiny { font-size: 14px; color: var(--muted); margin-top: 8px; }
+
+/* ---------- Pipeline / loop diagrams ---------- */
+.pipeline, .loop { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+.pstep, .lstep {
+  background: #fff; border: 1.5px solid var(--line); border-radius: 8px;
+  padding: 14px 16px; text-align: center; font-weight: 600; font-size: 16px; min-width: 108px;
+}
+.pstep small, .lstep small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 3px; }
+.pstep.hl { border-color: var(--accent); background: #eaf5f8; }
+.arr { color: var(--accent); font-size: 24px; font-weight: 700; }
+.loop { gap: 16px; }
+.lstep { min-width: 130px; border-color: var(--accent); }
+.loopback { color: var(--accent); font-weight: 700; font-size: 17px; margin-left: 6px; }
+
+.figbox { display: flex; flex-direction: column; justify-content: center; height: 100%; }
+.caption { text-align: center; color: var(--muted); font-size: 15px; margin-top: 16px; }
+
+/* ---------- Callout ---------- */
+.callout { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+.callout-big { font-size: 68px; font-weight: 800; color: var(--accent); line-height: 1; margin-bottom: 12px; }
+.callout p { font-size: 21px; line-height: 1.4; }
+
+/* ---------- Formula ---------- */
+.formula { text-align: center; font-size: 26px; font-weight: 700; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 24px; }
+.formula .w1 { color: var(--w1); } .formula .w2 { color: var(--w2); } .formula .w3 { color: var(--w3); }
+
+/* ---------- Motif difficulty levels ---------- */
+.level-easy { border-top: 4px solid var(--easy); }
+.level-mid  { border-top: 4px solid var(--mid); }
+.level-hard { border-top: 4px solid var(--hard); }
+.lvl { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+code { background: #e8eef2; padding: 1px 6px; border-radius: 4px; font-size: .95em; }
+
+/* ---------- Results table ---------- */
+.restable { width: 100%; border-collapse: collapse; font-size: 18px; margin-top: 6px; }
+.restable th, .restable td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.restable thead th { border-bottom: 2px solid var(--ink); font-size: 15px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.restable td.win { font-weight: 800; color: var(--llm); }
+.restable tbody tr:hover { background: var(--panel); }
+.chip { font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 20px; color: #fff; }
+.chip.easy { background: var(--easy); } .chip.mid { background: var(--mid); } .chip.hard { background: var(--hard); }
+
+/* ---------- Mock badge ---------- */
+.mock-badge {
+  align-self: flex-start; background: #fff5e0; color: #9a6b00; border: 1px solid #e6c877;
+  font-size: 13px; font-weight: 700; padding: 5px 12px; border-radius: 20px; margin-bottom: 14px;
+  letter-spacing: .02em;
+}
+
+/* ---------- Charts ---------- */
+.charttitle { font-size: 17px; margin-bottom: 6px; }
+.chart { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.chart .axis { stroke: #9fb0bc; stroke-width: 1.2; }
+.chart .baseline { stroke: #9a6b00; stroke-width: 1.4; stroke-dasharray: 5 4; }
+.chart .series { fill: none; stroke-width: 3; }
+.chart .series.llm { stroke: var(--llm); }
+.chart .series.opt { stroke: var(--opt); }
+.chart .axlbl { font-size: 11px; fill: var(--muted); font-family: inherit; }
+.chart .bar.easy { fill: var(--easy); } .chart .bar.mid { fill: var(--mid); } .chart .bar.hard { fill: var(--hard); }
+.chart .barval { font-size: 12px; font-weight: 700; fill: var(--ink); font-family: inherit; }
+.legend { font-size: 14px; color: var(--muted); margin-top: 8px; }
+.dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: middle; margin-right: 4px; }
+.dot.llm { background: var(--llm); } .dot.opt { background: var(--opt); }
+
+/* ---------- Speaker notes ---------- */
+.notes { display: none; }
+body.show-notes .notes {
+  display: block; position: absolute; left: 0; right: 0; bottom: 0;
+  background: #fffbe9; border-top: 2px solid #e6c877; color: #4a3d15;
+  font-size: 14px; line-height: 1.45; padding: 12px 22px; text-align: left;
+}
+body.show-notes .notes b { color: #7a5a00; }
+
+/* ---------- Nav buttons ---------- */
+.nav {
+  position: fixed; top: 50%; transform: translateY(-50%); z-index: 40;
+  width: 44px; height: 66px; border: none; border-radius: 8px;
+  background: rgba(23,36,47,.35); color: #fff; font-size: 30px; cursor: pointer;
+}
+.nav:hover { background: var(--accent); }
+.nav.prev { left: 14px; } .nav.next { right: 14px; }
+
+/* ---------- Architecture diagram (the loop) ---------- */
+.arch { display: flex; flex-direction: column; gap: 14px; flex: 1; justify-content: center; }
+.arch-row { display: flex; align-items: stretch; justify-content: center; gap: 8px; }
+.arch-node { border: 1.5px solid var(--line); border-radius: 10px; padding: 12px 14px; background: #fff; display: flex; flex-direction: column; }
+.arch-node.opt { background: #fbeee2; border-color: var(--opt); width: 210px; justify-content: center; }
+.arch-node.eval { background: var(--panel); flex: 1; max-width: 430px; }
+.arch-node.obj { background: #eaf5f8; border-color: var(--accent); width: 250px; justify-content: center; }
+.an-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+.an-sub { font-size: 13px; color: var(--muted); line-height: 1.35; }
+.arch-arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--accent); font-weight: 700; font-size: 13px; text-align: center; min-width: 58px; }
+.arch-arrow b { font-size: 22px; }
+.pipe-steps { margin: 4px 0 0 0; padding-left: 20px; }
+.pipe-steps li { font-size: 13px; line-height: 1.55; color: var(--ink); }
+.pipe-steps li i { color: var(--muted); }
+.decision { margin-top: 8px; padding: 6px 8px; border: 1px dashed var(--accent); border-radius: 6px; font-size: 12.5px; font-weight: 600; text-align: center; }
+.exit { margin-top: 6px; font-size: 12px; color: var(--muted); text-align: center; }
+.feedback-bar { border: 1.5px dashed var(--opt); background: #fbeee2; border-radius: 8px; padding: 9px 14px; font-size: 14px; color: #7a4420; text-align: center; }
+.feedback-bar .fb-arrow { font-size: 18px; font-weight: 700; margin-right: 6px; }
+.circ { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; margin-right: 4px; }
+.feedback-bar .circ { background: var(--opt); }
+
+/* ---------- Biology interpretation table ---------- */
+.biotable { width: 100%; border-collapse: collapse; font-size: 17px; margin-top: 4px; }
+.biotable th, .biotable td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.biotable thead th { border-bottom: 2px solid var(--ink); font-size: 14px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+.biotable .ind { font-weight: 700; white-space: nowrap; }
+.biotable .ind small { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+.biotable .hi { color: var(--easy); font-weight: 600; }
+.biotable .lo { color: var(--hard); font-weight: 600; }
+
+/* ---------- On-slide alert box (to-investigate / pending) ---------- */
+.slide-alert { background: #fff5e0; border: 1.5px solid #e6c877; border-left: 6px solid #d99a00; border-radius: 8px; padding: 14px 18px; font-size: 16px; color: #6b4e12; }
+.slide-alert b { color: #8a6100; }
+.conditional { font-size: 15px; color: var(--muted); font-style: italic; margin-bottom: 14px; }
+
+/* ============================================================
+   PRINT / PDF — one slide per landscape page, no chrome
+   ============================================================ */
+@media print {
+  @page { size: 1280px 720px; margin: 0; }
+  html, body { background: #fff; height: auto; }
+  .chrome, .nav { display: none !important; }
+  .viewport { position: static; inset: auto; overflow: visible; }
+  .stage { transform: none !important; width: 1280px; height: auto; }
+  .slide {
+    position: relative; inset: auto; display: flex !important;
+    width: 1280px; height: 720px; page-break-after: always; break-after: page;
+    border: none;
+  }
+  .slide:last-child { page-break-after: auto; }
+  .notes, body.show-notes .notes { display: none !important; }
+}

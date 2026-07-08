@@ -20,7 +20,25 @@
 		{\textbf{\large Abstract}}\\[0.3cm]
 \end{center}
 \noindent % Prevents the first line from indenting if you want it flush left
-Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.
+Enhanced crosslinking and immunoprecipitation (eCLIP) maps RNA-binding protein
+(RBP) contacts transcriptome-wide, but the biological quality of the resulting
+binding sites hinges on a handful of PureCLIP peak-calling parameters for which
+no universal optimum exists, the best values vary with the RBP, cell line and
+experiment quality of each dataset, and manual tuning is slow, subjective and
+does not scale to the ENCODE collection. We present an automated
+propose\,$\rightarrow$\,run\,$\rightarrow$\,score\,$\rightarrow$\,iterate
+framework that tunes these parameters against a biologically grounded composite
+objective combining cross-replicate reproducibility, motif enrichment and
+recovery of reference regions, with a collapse guard that penalises degenerate
+few-site solutions. Two interchangeable optimizers, a large language model
+(LLM) agent supplied with biological priors and a Bayesian Tree-structured
+Parzen Estimator (TPE) search, share the \emph{identical} evaluation and
+objective, so the comparison isolates the proposal strategy rather than the
+pipeline. We benchmark them against a default-parameter baseline across ENCODE
+eCLIP datasets, an initial five-dataset comparison expanding to 26 datasets
+across 15 RBPs, spanning crisp, degenerate and positional RNA motifs, and
+ask whether LLM reasoning adds value over black-box optimization and whether
+that value depends on how hard the RBP's motif is.
 
 \vspace*{1.5cm}
 
