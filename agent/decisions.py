@@ -53,6 +53,19 @@ THE PIPELINE HAS TWO STAGES, and the parameters you control belong to each:
 PRIOR KNOWLEDGE (use this to reason about the biology, not just the statistics):
 {json.dumps(priors, indent=2)}
 
+HOW THE BIOLOGY SHOULD INFORM YOUR CHOICES:
+  - Relate bandwidth_nt and force_width to the known motif length and to whether
+    this protein binds in sharp, point-like sites or in broad regions. A protein
+    with a short, well-defined motif that binds point-like sites is poorly served
+    by a very large bandwidth or a very wide force_width, which blur a precise
+    site; a protein binding broad regions tolerates wider settings.
+  - force_width should not be so wide that it dilutes a short motif, nor so narrow
+    that it cuts off the binding region.
+  - If your reasoning could apply unchanged to any generic signal-processing task
+    without mentioning THIS protein's biology, you have NOT used the prior
+    knowledge. Name the target protein, its motif, its binding_preference and its
+    role in RNA processing explicitly.
+    
 SEARCH BOUNDS (hard limits, never exceed these):
 {json.dumps(state['search_bounds'], indent=2)}
 
