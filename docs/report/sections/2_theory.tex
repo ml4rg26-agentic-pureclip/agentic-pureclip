@@ -23,16 +23,15 @@
 %       optimizer that the LLM is compared against.
 % ─────────────────────────────────────────────────────────────────────────
 
-\scaffold{Bullets to expand. Biology first, then computational tools; keep implementation in \S\ref{method}.}
+
 \begin{itemize}
   \item eCLIP mechanism \parencite{vannostrand2016}: UV crosslink $\rightarrow$ immunoprecipitation $\rightarrow$ RT truncates at the crosslink $\rightarrow$ 5$'$ read end marks the contact at $\sim$nucleotide resolution. Two IP replicates + SMInput control.
   \item PureCLIP \parencite{krakau2017}: HMM over read 5$'$-start density; ``crosslinked'' vs.\ ``background'' states; optional SMInput covariate. Bandwidth = signal smoothing, merge distance = site grouping, wrong values give too few or too many sites.
-  \item \textbf{Motif difficulty (background for one focused experiment).} Proteins differ in how sequence-defined their binding is: crisp k-mer motifs (RBFOX2 \texttt{UGCAUG}, PUM \texttt{UGUANAUA}) vs.\ degenerate (HNRNPK C-rich, SRSF1 GA-rich) vs.\ positional / non-k-mer (U2AF2 polypyrimidine tract, SF3B1/4 branch point). This spectrum is ``easy'' to ``hard'' for a motif-aware objective, and motivates a small side-experiment (\S\ref{results}) asking whether the LLM's prior helps more when the motif signal is weak. Note: the difficulty label is our manual annotation, not a quantity the pipeline computes.
   \item What makes a site set ``good'': reproducibility (chance-corrected), motif enrichment (PWM log-odds vs.\ shuffled background), benchmark recall (ENCODE reference regions).
-  \item PWMs / position weight matrices: log-odds scoring; motifs drawn from several databases (mCrossBase, ATtRACT, RBPmap, oRNAment, RBPDB); the most-enriched motif is reported per site set.
+  \item PWMs / position weight matrices: each candidate motif is scored as log-odds against a uniform background and scanned over a $\pm 15$\,nt window around every binding site (a site ``hits'' if it beats 80\% of the PWM's score range). Motifs are drawn from five databases (mCrossBase, ATtRACT, RBPmap, oRNAment, RBPDB). For each \emph{site set} (the binding sites produced by one run), we report the hit rate of the \emph{most enriched} motif, where enrichment is the hit rate over a per-window mononucleotide-shuffle background.
   \item LLM as a reasoning optimizer (domain priors + reading structured feedback) vs.\ Bayesian optimization / TPE \parencite{bergstra2011}, as implemented in Optuna \parencite{akiba2019} (surrogate model, exploration/exploitation, no domain knowledge).
   % Figure to add (not printed): pipeline schematic eCLIP reads -> PureCLIP ->
-  % sites -> scoring, plus a small motif-class table (crisp / degenerate / positional).
+  % sites -> scoring.
 \end{itemize}
 
 % Goal: give the reader the conceptual background needed to understand

@@ -23,20 +23,20 @@
 %   Cell line (K562, HepG2): two standard human cell types the data comes from.
 % ─────────────────────────────────────────────────────────────────────────
 
-%\scaffold{Bullets to expand into prose. Existing \% comments below give the intended narrative order.}
+
 \begin{itemize}
   \item RBPs drive post-transcriptional regulation; mapping their binding sites \emph{transcriptome-wide} is central to RNA biology. eCLIP yields per-nucleotide crosslink counts (aligned reads), not discrete sites, so a \emph{peak caller} is required as a post-processing step to turn this noisy read density into an interpretable binding-site set: its quality gates everything downstream.
-  \item PureCLIP's output is highly sensitive to a few numeric parameters, and there is no universal optimum. The best values depend on RBP, cell line and experiment quality including antibody efficiency.
+  \item PureCLIP's (such a \textit{peak caller}) output is highly sensitive to a few numeric parameters, and there is no universal optimum. The best values depend on RBP, cell line and experiment quality including antibody efficiency.
   \item Manual tuning does not scale (hours per genome-wide run, subjective, dozens of ENCODE datasets), motivating an automated, reproducible framework.
   \item Contribution: an automated \emph{propose $\rightarrow$ run $\rightarrow$ score $\rightarrow$ iterate} framework with two interchangeable optimizers on identical evaluation infrastructure: An LLM agent (biological priors + reasoning) vs.\ Optuna/TPE (black-box Bayesian search).
-  \item Scope: we test on \textbf{26 ENCODE datasets covering 15 proteins}, from easy cases (a clear, short binding motif) to hard ones (vague or position-defined motifs), to check whether the method still works beyond the easy cases.
+  \item Scope: we test on \textbf{26 ENCODE datasets covering 15 proteins} from several RBP families and both cell lines (K562, HepG2), a deliberately diverse set chosen to check whether the method generalizes rather than overfitting a handful of proteins.
   % Detail (for us / supervisors, not for the printed bullet): the 26 datasets =
   % 5 original pilot datasets (proteins RBFOX2, QKI, PUM1) + 1 ENCORE RBFOX2 dataset
   % + 20 new datasets added in 2026-07 (12 new proteins). "15 proteins" counts each
   % protein once; some proteins appear in two cell lines (K562, HepG2), which is why
   % there are more datasets than proteins.
-  \item Research question: does an automated LLM loop help us find good PureCLIP parameters, i.e.\ does it beat a standard automated search (Optuna) and the untuned defaults, and does its advantage depend on how hard the protein's motif is?
-  \item Why the hard cases matter: splicing factors are clinically important, because faulty RNA splicing drives many cancers and neurological diseases, so accurate binding-site maps for these harder proteins, not just for the easy ones, are what make robust automated tuning worthwhile.
+  \item Research question: does an automated LLM loop help us find good PureCLIP parameters, i.e.\ does it beat a standard automated search (Optuna) and the untuned defaults?
+  \item Why binding-site quality matters: many of these proteins are splicing factors, which are clinically important because faulty RNA splicing drives many cancers and neurological diseases, so accurate binding-site maps for them are what make robust automated tuning worthwhile.
   % Status note (not printed): the LLM-vs-Optuna comparison on the 20 new datasets
   % is still running; the final head-to-head numbers are reported in Results.
 \end{itemize}

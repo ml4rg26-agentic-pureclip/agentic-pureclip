@@ -32,6 +32,8 @@ __pycache__/
 logs/
 *.pdf
 *.html
+# ...except the presentation deck, which is a tracked source deliverable.
+!docs/presentation/*.html
 
 # ==============================
 # Data, References & Results
