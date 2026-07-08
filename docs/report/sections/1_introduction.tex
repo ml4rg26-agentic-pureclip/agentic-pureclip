@@ -1,16 +1,44 @@
 \section{Introduction}
 \label{introduction}
 
-\scaffold{Bullets to expand into prose. Existing \% comments below give the intended narrative order.}
+% ─────────────────────────────────────────────────────────────────────────
+% PLAIN-LANGUAGE GLOSSARY (comment only, not printed). Terms we must be able
+% to explain to our supervisors. Keep it simple.
+%   RBP (RNA-binding protein): a protein that sticks to RNA and controls it
+%       (e.g. which pieces get spliced, how long the RNA survives).
+%   eCLIP: a lab method that finds WHERE on the RNA a given RBP binds. Its raw
+%       output is short sequencing reads piled up along the genome.
+%   Peak caller: software that turns that noisy pile-up of reads into a clean
+%       list of real binding sites ("peaks").
+%   PureCLIP: the specific peak caller we use.
+%   Parameter: a numeric knob of PureCLIP (e.g. how much to smooth the signal).
+%       Different knob settings => very different binding-site lists.
+%   Motif: the short RNA "word" a protein prefers to bind (e.g. RBFOX2 likes
+%       UGCAUG). Crisp = clear/short; degenerate = fuzzy; positional = defined
+%       by location (e.g. next to a splice site) rather than by a fixed word.
+%   Reproducibility: do the two lab repeats (replicates) agree on the sites?
+%       Real sites recur in both; noise does not.
+%   Splicing factor: an RBP whose job is RNA splicing; these often have fuzzy
+%       or position-based motifs, so we use them as the "hard" test cases.
+%   Cell line (K562, HepG2): two standard human cell types the data comes from.
+% ─────────────────────────────────────────────────────────────────────────
+
+%\scaffold{Bullets to expand into prose. Existing \% comments below give the intended narrative order.}
 \begin{itemize}
-  \item RBPs drive post-transcriptional regulation; mapping their binding sites genome-wide is central to RNA biology. eCLIP yields aligned reads, so a \emph{peak caller} is required to turn reads into discrete binding sites.
-  \item PureCLIP's output is highly sensitive to a few numeric parameters, and there is no universal optimum --- the best values depend on RBP, cell line and antibody efficiency.
-  \item Manual tuning does not scale (hours per genome-wide run, subjective, dozens of ENCODE datasets) --- motivating an automated, reproducible framework.
-  \item Contribution: an automated \emph{propose $\rightarrow$ run $\rightarrow$ score $\rightarrow$ iterate} framework with two interchangeable optimizers on identical evaluation infrastructure --- an LLM agent (biological priors + reasoning) vs.\ Optuna/TPE (black-box Bayesian search).
-  \item Scope: the study grew from a 3-RBP, crisp-motif pilot (RBFOX2, QKI, PUM1) to \textbf{26 datasets across 12+ RBPs}, adding a class of \emph{splicing factors} whose motifs are degenerate or positional --- a deliberate stress-test of generalization.
-  \item Research question: does LLM reasoning add value over principled numerical optimization for a small bioinformatics parameter space --- and \emph{does that value depend on how hard the RBP's motif is}?
-  \item \TODO{Fix the final reported scope: pilot (5 datasets, fully compared) vs.\ the expanded 26-dataset study. The LLM-vs-Optuna comparison on the 20 new datasets is still running (see Results).}
-  \item \TODO{Add 1--2 sentences on why splicing factors matter clinically (splicing dysregulation in cancer/neurological disease) to strengthen motivation.}
+  \item RBPs drive post-transcriptional regulation; mapping their binding sites \emph{transcriptome-wide} is central to RNA biology. eCLIP yields per-nucleotide crosslink counts (aligned reads), not discrete sites, so a \emph{peak caller} is required as a post-processing step to turn this noisy read density into an interpretable binding-site set: its quality gates everything downstream.
+  \item PureCLIP's output is highly sensitive to a few numeric parameters, and there is no universal optimum. The best values depend on RBP, cell line and experiment quality including antibody efficiency.
+  \item Manual tuning does not scale (hours per genome-wide run, subjective, dozens of ENCODE datasets), motivating an automated, reproducible framework.
+  \item Contribution: an automated \emph{propose $\rightarrow$ run $\rightarrow$ score $\rightarrow$ iterate} framework with two interchangeable optimizers on identical evaluation infrastructure: An LLM agent (biological priors + reasoning) vs.\ Optuna/TPE (black-box Bayesian search).
+  \item Scope: we test on \textbf{26 ENCODE datasets covering 15 proteins}, from easy cases (a clear, short binding motif) to hard ones (vague or position-defined motifs), to check whether the method still works beyond the easy cases.
+  % Detail (for us / supervisors, not for the printed bullet): the 26 datasets =
+  % 5 original pilot datasets (proteins RBFOX2, QKI, PUM1) + 1 ENCORE RBFOX2 dataset
+  % + 20 new datasets added in 2026-07 (12 new proteins). "15 proteins" counts each
+  % protein once; some proteins appear in two cell lines (K562, HepG2), which is why
+  % there are more datasets than proteins.
+  \item Research question: does an automated LLM loop help us find good PureCLIP parameters, i.e.\ does it beat a standard automated search (Optuna) and the untuned defaults, and does its advantage depend on how hard the protein's motif is?
+  \item Why the hard cases matter: splicing factors are clinically important, because faulty RNA splicing drives many cancers and neurological diseases, so accurate binding-site maps for these harder proteins, not just for the easy ones, are what make robust automated tuning worthwhile.
+  % Status note (not printed): the LLM-vs-Optuna comparison on the 20 new datasets
+  % is still running; the final head-to-head numbers are reported in Results.
 \end{itemize}
 
 % Goal: motivate WHY automated parameter optimization is needed.
@@ -21,7 +49,7 @@
 %     RNA binding sites at scale and with high precision is a central
 %     goal of modern RNA biology.
 %   • eCLIP produces genome-wide binding maps, but the raw output is
-%     aligned reads — a peak caller is required to convert these into
+%     aligned reads, a peak caller is required to convert these into
 %     a discrete set of binding sites.
 
 % ── 2. The parameter sensitivity problem ──────────────────────────────
@@ -46,7 +74,7 @@
 % ── 4. This project and research question ─────────────────────────────
 %   • We built an automated optimization framework that proposes parameter
 %     sets, runs the full pipeline, scores the result against biological
-%     quality signals, and iterates — replacing manual trial-and-error.
+%     quality signals, and iterates, replacing manual trial-and-error.
 %   • Two optimizer strategies are compared on identical evaluation
 %     infrastructure: an LLM agent (biological reasoning + priors) and
 %     Optuna/TPE (systematic Bayesian search).

@@ -3,12 +3,16 @@
 
 \scaffold{Bullets to expand. Detailed \% guidance below is largely still valid; add the motif-difficulty and positional-binder angles.}
 \begin{itemize}
-  \item \textbf{Interpretation via motif difficulty.} Frame the LLM-vs-Optuna outcome against the crisp/degenerate/positional axis: the LLM's prior should matter most where the objective's motif signal is weakest and Optuna is searching blind. If the margin does \emph{not} widen, that is itself a finding --- the prior buys little on hard RBPs.
-  \item \textbf{Positional binders expose an objective limitation.} For U2AF/SF3B/RBM22 the motif term is a weak proxy (binding is defined by splice-site position, not a k-mer), so composite scores for these should be read with care --- a positional prior is the natural fix (identified, not implemented).
+  \item \textbf{Note: interpretations are expectations, not results yet.} The full LLM-vs-Optuna head-to-head (and the motif-difficulty side-experiment) are still running, so the points below are framed as what we expect the results to show, to be confirmed once the numbers land.
+  \item \textbf{Interpretation via motif difficulty (hypothesis).} We expect the LLM's prior to matter most where the objective's motif signal is weakest and Optuna is searching blind, i.e.\ the LLM's margin should widen crisp $\rightarrow$ degenerate $\rightarrow$ positional. If the margin does \emph{not} widen, that is itself a finding: the prior buys little on hard proteins.
+  \item \textbf{The single fixed objective does not fit every dataset.} Our composite is one hard-coded formula applied to all datasets, which has two distinct consequences:
+    \begin{itemize}
+      \item \emph{Equal-replicate assumption (supervisor's point).} The reproducibility term (weight $0.5$) treats the two lab replicates as equally good. If we know one replicate is of much lower quality, its agreement score is misleading and the fixed weights cannot compensate. We keep the current weighting for time; quality-aware or learned weighting is the natural fix.
+      \item \emph{Weak motif proxy for positional binders.} For U2AF/SF3B/RBM22 the motif term (weight $0.25$) is only a proxy, because binding is defined by splice-site position, not a k-mer. Composite scores for these should be read with care; a positional prior is the natural fix (identified, not implemented).
+    \end{itemize}
   \item \textbf{Infrastructure as a contribution.} The shared-objective dashboard and manifest-driven runners make the study reproducible and the LLM-vs-Optuna comparison auditable per iteration.
   \item Limitations already outlined below: chr21-only, small search space, single LLM (no prompt ablation), budget asymmetry, mononucleotide-shuffle background, ENCODE reference is pipeline output not gold standard.
-  \item \TODO{Cross-cell-line reproducibility analysis (paired K562/HepG2) is enabled by the new data but not yet done.}
-  \item \TODO{Add iso-budget re-run and a prior-ablation of the LLM (remove biological priors / delta table) to isolate where the LLM's advantage comes from.}
+  \item \textbf{Future work.} The new data enables a paired cross-cell-line reproducibility analysis (K562 vs.\ HepG2), which we have not yet run. To pin down where any LLM advantage comes from, an iso-budget re-run (equal trial counts) and a prior-ablation of the LLM (removing the biological priors and the delta table) are the natural next steps.
 \end{itemize}
 
 % ── 1. Interpretation ─────────────────────────────────────────────────
@@ -23,7 +27,7 @@
 %   Broader point: LLM advantages likely scale with problem complexity.
 
 % ── 2. Biological interpretation ──────────────────────────────────────
-%   • RBFOX2_K562 (hardest): wider bandwidth (>50 nt) helped — suggests
+%   • RBFOX2_K562 (hardest): wider bandwidth (>50 nt) helped, suggests
 %     diffuse crosslink signal or broad footprints.
 %   • Cell-line effects: if optimal parameters differ between RBFOX2_K562
 %     and RBFOX2_HepG2, this validates the dataset-dependent tuning premise.
@@ -37,7 +41,7 @@
 %       reasoning can outperform systematic sampling.
 %   (c) Single LLM, no prompt ablation: only DeepSeek tested; no ablation
 %       of priors, delta table, or temperature.
-%   (d) Budget asymmetry: LLM 10–12 iters vs. Optuna 12–15 — not iso-budget.
+%   (d) Budget asymmetry: LLM 10–12 iters vs. Optuna 12–15, not iso-budget.
 %   (e) Motif background: mononucleotide shuffle destroys dinucleotide
 %       context; dinucleotide shuffling would be more rigorous.
 %   (f) Benchmark reference: ENCODE "top regions" are themselves pipeline

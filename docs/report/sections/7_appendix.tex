@@ -1,14 +1,16 @@
 \section{Appendix}
 \label{appendix}
 
-\scaffold{Bullets --- include if the page budget allows.}
+\scaffold{Bullets, include if the page budget allows.}
 \begin{itemize}
+  \item Full ENCODE accession table for all datasets (IP rep1, IP rep2, SMInput): the 5 original, 1 ENCORE, and 20 new 2026-07 datasets (26 total, 15 proteins).
   \item Full 7-parameter table with bounds, types, and descriptions.
+  \item Complete per-dataset results table (composite, reproducibility, motif hit-rate + enrichment, recall, $n$ sites) for both optimizers.
   \item \texttt{score\_report.json} field reference (every output field the scorer writes).
   \item Full LLM decision-prompt template (priors + delta table + bounds).
+  \item Full PWM-database inventory used for motif scoring (mCrossBase, ATtRACT, RBPmap, oRNAment, RBPDB) and how the target motif is auto-resolved per protein.
   \item Per-dataset convergence plots not shown in Results.
   \item Dashboard screenshots (per-dataset Runs view, binding-``docking'' landscape) as evidence of the reproducible tooling.
-  \item \TODO{This section (\S7) and \texttt{8\_appendix.tex} (\S\ref{supplementary}) overlap --- decide on one appendix and remove the other; the second file was only added to fix a broken \texttt{\textbackslash include}.}
 \end{itemize}
 
 % Include here if page budget allows:

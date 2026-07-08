@@ -1,16 +1,38 @@
 \section{Theory}
 \label{theory}
 
+% ─────────────────────────────────────────────────────────────────────────
+% PLAIN-LANGUAGE GLOSSARY for the technical terms in this section (comment
+% only, not printed). Talking points for the supervisor meeting.
+%   Crosslink: UV light "glues" the protein to the exact RNA spot it touches,
+%       so sequencing can later read out that spot.
+%   SMInput / input control: a background sample without the protein pulldown;
+%       used to subtract non-specific signal (noise).
+%   HMM (hidden Markov model): a statistical model that walks along the genome
+%       and labels each position "bound" or "background"; PureCLIP uses one.
+%   Bandwidth: how much PureCLIP smooths the signal. Merge distance: how close
+%       two signals must be to count as one site. Both are tunable parameters.
+%   PWM (position weight matrix): a table giving, per position, how much each
+%       letter (A/C/G/U) is preferred. Used to score how well a site matches
+%       the protein's motif. Log-odds = motif score vs. random-sequence score.
+%   Shuffled background: randomly reordered sequence used as a "no real motif"
+%       baseline, so we can tell true enrichment from chance.
+%   Optuna / TPE (Tree-structured Parzen Estimator): a standard automated
+%       search that tries parameter sets, learns from the scores, and proposes
+%       the next set. No biology knowledge, purely data-driven. Our "baseline"
+%       optimizer that the LLM is compared against.
+% ─────────────────────────────────────────────────────────────────────────
+
 \scaffold{Bullets to expand. Biology first, then computational tools; keep implementation in \S\ref{method}.}
 \begin{itemize}
-  \item eCLIP mechanism (Van Nostrand et al.\ 2016): UV crosslink $\rightarrow$ immunoprecipitation $\rightarrow$ RT truncates at the crosslink $\rightarrow$ 5$'$ read end marks the contact at $\sim$nucleotide resolution. Two IP replicates + SMInput control.
-  \item PureCLIP: HMM over read 5$'$-start density; ``crosslinked'' vs.\ ``background'' states; optional SMInput covariate. Bandwidth = signal smoothing, merge distance = site grouping --- wrong values give too few or too many sites.
-  \item \textbf{Motif-difficulty axis (central to this work).} Crisp k-mer motifs (RBFOX2 \texttt{UGCAUG}, PUM \texttt{UGUANAUA}) vs.\ degenerate (HNRNPK C-rich, SRSF1 GA-rich) vs.\ positional / non-k-mer (U2AF2 polypyrimidine tract, SF3B1/4 branch point). This spectrum is what separates ``easy'' from ``hard'' for a motif-aware objective.
+  \item eCLIP mechanism \parencite{vannostrand2016}: UV crosslink $\rightarrow$ immunoprecipitation $\rightarrow$ RT truncates at the crosslink $\rightarrow$ 5$'$ read end marks the contact at $\sim$nucleotide resolution. Two IP replicates + SMInput control.
+  \item PureCLIP \parencite{krakau2017}: HMM over read 5$'$-start density; ``crosslinked'' vs.\ ``background'' states; optional SMInput covariate. Bandwidth = signal smoothing, merge distance = site grouping, wrong values give too few or too many sites.
+  \item \textbf{Motif difficulty (background for one focused experiment).} Proteins differ in how sequence-defined their binding is: crisp k-mer motifs (RBFOX2 \texttt{UGCAUG}, PUM \texttt{UGUANAUA}) vs.\ degenerate (HNRNPK C-rich, SRSF1 GA-rich) vs.\ positional / non-k-mer (U2AF2 polypyrimidine tract, SF3B1/4 branch point). This spectrum is ``easy'' to ``hard'' for a motif-aware objective, and motivates a small side-experiment (\S\ref{results}) asking whether the LLM's prior helps more when the motif signal is weak. Note: the difficulty label is our manual annotation, not a quantity the pipeline computes.
   \item What makes a site set ``good'': reproducibility (chance-corrected), motif enrichment (PWM log-odds vs.\ shuffled background), benchmark recall (ENCODE reference regions).
   \item PWMs / position weight matrices: log-odds scoring; motifs drawn from several databases (mCrossBase, ATtRACT, RBPmap, oRNAment, RBPDB); the most-enriched motif is reported per site set.
-  \item LLM as a reasoning optimizer (domain priors + reading structured feedback) vs.\ Bayesian optimization / TPE (surrogate model, exploration--exploitation, no domain knowledge).
-  \item \TODO{Add the pipeline schematic figure (eCLIP reads $\rightarrow$ PureCLIP $\rightarrow$ sites $\rightarrow$ scoring) and a small motif-class table.}
-  \item \TODO{Add missing citations to \texttt{master.bib}: PureCLIP (Krakau et al.\ 2017), Optuna (Akiba et al.\ 2019), TPE (Bergstra et al.\ 2011), DeepSeek, and the motif databases used.}
+  \item LLM as a reasoning optimizer (domain priors + reading structured feedback) vs.\ Bayesian optimization / TPE \parencite{bergstra2011}, as implemented in Optuna \parencite{akiba2019} (surrogate model, exploration/exploitation, no domain knowledge).
+  % Figure to add (not printed): pipeline schematic eCLIP reads -> PureCLIP ->
+  % sites -> scoring, plus a small motif-class table (crisp / degenerate / positional).
 \end{itemize}
 
 % Goal: give the reader the conceptual background needed to understand
@@ -56,7 +78,7 @@
 %     going beyond pure black-box function optimization.
 %   • In an iterative loop, an LLM can read structured feedback (score
 %     deltas per iteration) and reason about which parameter to change
-%     next — analogous to a human expert tuning settings by hand, but
+%     next, analogous to a human expert tuning settings by hand, but
 %     automated and consistent.
 
 % ── 5. Bayesian optimization (Optuna / TPE) ───────────────────────────
