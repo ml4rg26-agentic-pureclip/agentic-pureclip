@@ -1,10 +1,10 @@
 \section{Discussion, Limitations \& Future Work}
 \label{discussion}
 
-\scaffold{Bullets to expand. Detailed \% guidance below is largely still valid; add the motif-difficulty and positional-binder angles.}
+
 \begin{itemize}
   \item \textbf{Note: interpretations are expectations, not results yet.} The full LLM-vs-Optuna head-to-head (and the motif-difficulty side-experiment) are still running, so the points below are framed as what we expect the results to show, to be confirmed once the numbers land.
-  \item \textbf{Interpretation via motif difficulty (hypothesis).} We expect the LLM's prior to matter most where the objective's motif signal is weakest and Optuna is searching blind, i.e.\ the LLM's margin should widen crisp $\rightarrow$ degenerate $\rightarrow$ positional. If the margin does \emph{not} widen, that is itself a finding: the prior buys little on hard proteins.
+  \item \textbf{Interpretation via motif difficulty (hypothesis).} Proteins differ in how sequence-defined their binding is, a spectrum from \emph{crisp} k-mer motifs (RBFOX2 \texttt{UGCAUG}, PUM \texttt{UGUANAUA}), through \emph{degenerate} ones (HNRNPK C-rich, SRSF1 GA-rich), to \emph{positional} / non-k-mer binders (U2AF2 polypyrimidine tract, SF3B1/4 branch point). The motif term is a strong signal for the first group and a weak one for the last. We therefore expect the LLM's biological prior to help most where that signal is weakest and Optuna is searching blind, i.e.\ the LLM's margin over Optuna should widen crisp $\rightarrow$ degenerate $\rightarrow$ positional. A focused side-experiment (\texttt{config/insight\_llm\_vs\_optuna.yaml}: PUM2 / SRSF1 / HNRNPK / U2AF2 / SF3B4, K562, both optimizers) tests this; the batch is still running. Note the difficulty label is our manual annotation, not a quantity the pipeline computes, and if the margin does \emph{not} widen, that is itself a finding: the prior buys little on hard proteins.
   \item \textbf{The single fixed objective does not fit every dataset.} Our composite is one hard-coded formula applied to all datasets, which has two distinct consequences:
     \begin{itemize}
       \item \emph{Equal-replicate assumption (supervisor's point).} The reproducibility term (weight $0.5$) treats the two lab replicates as equally good. If we know one replicate is of much lower quality, its agreement score is misleading and the fixed weights cannot compensate. We keep the current weighting for time; quality-aware or learned weighting is the natural fix.

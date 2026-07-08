@@ -1,9 +1,9 @@
 \section{Results}
 \label{results}
 
-\scaffold{Bullets to expand. Report numbers from \texttt{results/} (dashboard \texttt{/api/status}); mark the budget asymmetry as a caveat.}
+
 \begin{itemize}
-  \item \textbf{Baseline vs.\ LLM vs.\ Optuna head-to-head (original 5 datasets).} Report the \texttt{bigrun2} comparison (both optimizers, collapse-guarded objective), per-dataset winner + overall, \emph{against a default-parameter baseline}: does either optimizer actually beat untuned PureCLIP? (Without this reference point the head-to-head is uninterpretable.)
+  \item \textbf{Baseline vs.\ LLM vs.\ Optuna head-to-head (original 5 datasets).} Report the \texttt{bigrun2} comparison (both optimizers, collapse-guarded objective), per-dataset winner + overall, \emph{against a default-parameter baseline}: does either optimizer actually beat untuned PureCLIP?
   \item \textbf{New splicing factors, preliminary chr21 (LLM).} Composites observed so far, e.g.\ U2AF2\_K562 $\approx$0.44 (highest of the new set), PTBP1\_HepG2 $\approx$0.28, HNRNPK\_K562 $\approx$0.23 / HepG2 $\approx$0.21 (after the PSSM fix). 18/20 completed on the first pass; HNRNPK required the log-odds fix.
   \item \textbf{Biological quality.} Reproducibility (RBFOX2\_K562 hardest, $\approx$0.10); motif-enrichment table (best motif, hit-rate, background, enrichment, canonical Yes/No, PWM source); benchmark recall on chr21.
   \item \textbf{Cross-cell-line.} Same RBP in K562 vs.\ HepG2, do optimal parameters differ (validates the dataset-dependent tuning premise)?
@@ -14,13 +14,6 @@
   % Figure to add (not printed): per-dataset convergence plots (composite vs.
   %   iteration, LLM vs. Optuna, baseline marked), exportable from the dashboard.
 \end{itemize}
-
-\alertbox{\textbf{Motif-difficulty side-experiment.} A focused run
-(\texttt{config/insight\_llm\_vs\_optuna.yaml}: PUM2 / SRSF1 / HNRNPK / U2AF2 /
-SF3B4, K562, both optimizers) tests whether the LLM's margin over Optuna widens
-from crisp $\rightarrow$ degenerate $\rightarrow$ positional motifs. This batch
-is still running; if the numbers arrive in time we report them here, otherwise
-we carry the hypothesis into the Discussion only.}
 
 % ── 1. LLM vs. Optuna head-to-head ────────────────────────────────────
 %   TABLE, one row per dataset × optimizer:
