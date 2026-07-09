@@ -1,0 +1,16 @@
+# Keep the API build context small — the image only needs pyproject/uv.lock, src/
+# and dashboard/api (see dashboard/api/Dockerfile). results/ and config/ are bind-
+# mounted at run time, not baked in.
+.git
+.github
+.venv
+.snakemake
+.pytest_cache
+**/__pycache__
+**/node_modules
+dashboard/ui/build
+dashboard/ui/.react-router
+results
+tests
+docs
+*.log

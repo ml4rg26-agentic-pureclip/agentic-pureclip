@@ -1,23 +1,24 @@
 # Agentic PureCLIP
 
 Parameter optimization for **eCLIP** peak calling with
-[PureCLIP](https://github.com/skrakau/PureCLIP). An optimizer proposes PureCLIP
-+ post-processing parameters; for each set the pipeline runs PureCLIP, scores the
+[PureCLIP](https://github.com/skrakau/PureCLIP). An optimizer proposes PureCLIP +
+post-processing parameters; for each set the pipeline runs PureCLIP, scores the
 result against biological quality signals, and iterates to maximize a composite
-quality score. Two interchangeable optimizers are available — an **LLM agent**
-(DeepSeek, via LangGraph) and **Optuna** (TPE/Bayesian) — sharing the same
-evaluation and objective, so they can be compared apples-to-apples.
+quality score. Two interchangeable optimizers share the same evaluation and
+objective — an **LLM agent** (DeepSeek, via LangGraph) and **Optuna**
+(TPE/Bayesian) — so they can be compared apples-to-apples.
 
-> This README is the practical quick-start (eCLIP, PureCLIP, the RBPs and their
-> motifs, cell lines, and the scoring rationale).
+A live **dashboard** tracks every run, and a small **CLI** launches them.
+
+![Dashboard](docs/images/dashboard.png)
 
 ## What it does
 
 From pre-aligned, deduplicated ENCODE BAM files (IP replicates + size-matched
 input), the Snakemake pipeline merges IP → runs `pureclip2` → per-replicate
 PureCLIP → post-processes to a standardized footprint → scores. The optimizer
-loops this, searching for the parameters that give the most trustworthy
-binding sites.
+loops this, searching for the parameters that give the most trustworthy binding
+sites.
 
 ### Objective (`agentic_pureclip.scoring.objective::composite_objective`)
 
@@ -37,15 +38,12 @@ Weights are configurable per run via `priors.objective_weights`.
 Toolchain is **uv**; the LLM is **DeepSeek** (`DEEPSEEK_API_KEY` in `.env`).
 
 ```bash
-uv sync
-cp .env.example .env            # add DEEPSEEK_API_KEY (Optuna runs need no key)
-uv run python -m pytest tests/ -q   # tests (DEEPSEEK_API_KEY=dummy is fine)
+uv sync                              # installs the project (editable) + deps
+cp .env.example .env                 # add DEEPSEEK_API_KEY (Optuna needs no key)
+uv run python -m pytest tests/ -q    # tests (DEEPSEEK_API_KEY=dummy is fine)
 ```
 
 ### Run an optimization
-
-`uv sync` installs the project editable, so the `agentic_pureclip` package and
-its `python -m` entry points resolve without a `PYTHONPATH` hack.
 
 ```bash
 # LLM agent
@@ -59,41 +57,54 @@ CONFIG_PATH=config/run_config.yaml MAX_ITER=12 uv run python -m agentic_pureclip
 minutes/iter); set it `false` for a full-genome run (hours/pass). The best
 parameters are saved to `config/best_config.yaml`.
 
-### Failure-tolerant batches
+### Launch a run with the CLI
 
-`scripts/run/overnight_batch.py` runs many jobs within a wall-clock budget, isolating
-each job and never aborting the batch on a failure. Manifests live in `config/`
-(e.g. `bigrun2_jobs.yaml`). Results accumulate in `results/overnight/`
-(`iterations.jsonl`, `jobs.jsonl`, `summary.csv`, `<job>/decisions.jsonl`).
-
-```bash
-uv run python scripts/run/overnight_batch.py \
-    --manifest config/bigrun2_jobs.yaml --hours 12 --no-repeat \
-    --pureclip-dir /vol/storage1/johannes/projects
-```
-
-### Dashboard
-
-Two independent services under `dashboard/`:
-
-- **`dashboard/api/`** — FastAPI backend serving JSON only (`/api/status`,
-  `/api/runs`, `/api/options`, `POST /api/schedule`). Run it from the repo root.
-- **`dashboard/ui/`** — React Router SPA; in dev the Vite proxy forwards `/api`
-  to the backend (`MONITOR_API`, default `http://localhost:8888`).
+`agentic-pureclip-run` is the one command for starting a parameter search — it
+writes a standard batch manifest and runs the pipeline within a wall-clock budget,
+isolating each job so a single failure never aborts the run. The dashboard's
+**Plan run** page builds this exact command for you to copy.
 
 ```bash
-uv run uvicorn dashboard.api.main:app --host 0.0.0.0 --port 8888   # data API
-cd dashboard/ui && npm install && npm run dev                      # UI dev (proxies /api)
+uv run agentic-pureclip-run \
+    --dataset RBFOX2_K562 --optimizer llm \
+    --max-iter 8 --hours 4 --threads 32 --chr21 \
+    --weight reproducibility=0.5 --weight motif=0.25 --weight recall=0.25 \
+    --param pureclip.bandwidth_nt=20:100 --param postprocessing.force_width=3:15
 ```
 
-UI pages: **Dashboard** (active run, queue/ETA, leaderboard with LLM-vs-Optuna
-head-to-head), **Runs** (per-iteration decision trail), **Plan run** (configure +
-schedule a run), **Variables** (plain-English guide to every knob).
+It prints a job id and a log path; the dashboard then tracks the run live. Add
+`--dry-run` to preview the manifest and launch command without starting anything.
+Results accumulate under `results/overnight/` (`iterations.jsonl`, `jobs.jsonl`,
+`summary.csv`, `<job>/decisions.jsonl`).
+
+## Dashboard
+
+The dashboard has four pages: **Dashboard** (active run, queue/ETA, and a
+per-dataset leaderboard with LLM-vs-Optuna head-to-head), **Runs** (per-iteration
+decision trail), **Plan run** (configure a search and copy its CLI command), and
+**Variables** (a plain-English guide to every knob).
+
+### View the deployed dashboard
+
+The dashboard runs as a Docker Compose stack on the compute VM. It's bound to the
+VM's localhost, so open an SSH tunnel and browse `http://localhost:8080`:
+
+```bash
+ssh -N -L 8080:localhost:8080 -p 30121 -i ~/.ssh/id_ed25519 ubuntu@194.94.4.28
+# then open http://localhost:8080
+```
+
+The dashboard is **read-only monitoring** — it shows live run data but doesn't
+launch jobs itself. Start runs with `agentic-pureclip-run` (above); the **Plan
+run** page generates that command for you.
+
+Running it yourself (dev servers or the Compose stack) and the deployment details
+are in the [developer onboarding guide](docs/developer-onboarding.md).
 
 ## Datasets
 
-Registered in `agentic_pureclip.pipeline.datasets`: RBFOX2_K562, RBFOX2_HepG2, QKI_K562,
-QKI_HepG2, PUM1_K562 (+ ENCORE_RBFOX2_K562). `data/` and `results/` are
+Registered in `agentic_pureclip.pipeline.datasets` (RBFOX2, QKI, PUM1/PUM2,
+U2AF1/U2AF2, and more, across K562 and HepG2). `data/` and `results/` are
 gitignored. Regenerate a dataset config:
 
 ```bash
@@ -104,24 +115,24 @@ python scripts/data/write_dataset_config.py RBFOX2_K562 --out config/datasets/RB
 
 The core is one installable package, `src/agentic_pureclip/`, whose subpackages
 are the three things this project contributes — the optimization **loop**, the
-**scoring**, and the **postprocessing** — with the un-glamorous plumbing kept
-separate under `pipeline/`.
+**scoring**, and the **postprocessing** — plus the plumbing under `pipeline/` and
+run-launching under `run/`.
 
 | Path | What |
 |------|------|
-| `src/agentic_pureclip/loop/` | **The optimization loop.** `graph.py` (LLM/LangGraph), `optuna_runner.py` (TPE) — interchangeable optimizers sharing `evaluation.py` (one iter: run → score → objective), `state.py`, `report.py` |
-| `src/agentic_pureclip/scoring/` | **Quality signals + objective.** `run_scorers.py` (reproducibility, motif, recall) and `objective.py` (`composite_objective`, weights, prompt) |
-| `src/agentic_pureclip/postprocess/` | **Standardized footprint.** `postprocess.py` (filter/format PureCLIP output) + the `Snakefile` that drives the pipeline |
-| `src/agentic_pureclip/pipeline/` | Plumbing: `configs.py` (bounds/validation), `datasets.py`, `motifs.py` (PWM log-odds), `runner.py` (invokes Snakemake), `logging_config.py` |
-| `scripts/` | Ops utilities grouped by purpose: `data/` (download + prepare datasets), `motifs/` (motif library), `run/` (`batch_runner.py`, `overnight_batch.py`) |
-| `dashboard/` | The live dashboard: `api/` (FastAPI data provider) + `ui/` (React Router SPA), each independently runnable |
-| `config/` | run configs, dataset configs, batch manifests, priors |
-| `tests/` | pytest suite |
-| `docs/` | architecture notes, meeting artifacts, and the LaTeX thesis (`docs/report/`) |
+| `src/agentic_pureclip/loop/` | The optimization loop: `graph.py` (LLM/LangGraph), `optuna_runner.py` (TPE), shared `evaluation.py` / `state.py` / `report.py` |
+| `src/agentic_pureclip/scoring/` | Quality signals + objective: `run_scorers.py`, `objective.py` |
+| `src/agentic_pureclip/postprocess/` | Standardized footprint + the `Snakefile` |
+| `src/agentic_pureclip/pipeline/` | Plumbing: bounds, datasets, motifs (PWM), Snakemake runner |
+| `src/agentic_pureclip/run/` | Run scheduling shared by the CLI and dashboard (`schedule.py`, `launcher.py`, `cli.py`) |
+| `scripts/` | Ops utilities: `data/`, `motifs/`, `run/` |
+| `dashboard/` | The dashboard: `api/` (FastAPI) + `ui/` (React SPA) + `proxy/` (Caddy), `docker-compose.yml` at the repo root |
+| `config/`, `tests/`, `docs/` | Run/dataset configs; pytest suite; architecture notes, onboarding, and the thesis (`docs/report/`) |
 
 ## Compute VM
 
-Long runs and the dashboard run on `ssh bio`
-(`/vol/storage1/johannes/projects/agentic-pureclip`). `pureclip2` is not on the
-default PATH — prepend `/vol/storage1/johannes/projects`. Tunnel the dashboard:
-`ssh -f -N -L 8888:localhost:8888 bio`.
+Long runs and the dashboard live on the VM at
+`/vol/storage1/johannes/projects/agentic-pureclip`. `pureclip2` is not on the
+default PATH — prepend `/vol/storage1/johannes/projects` (the CLI's
+`--pureclip-dir` defaults to this). Container images are stored on
+`/vol/storage1` (the root disk is small); see the onboarding guide for details.

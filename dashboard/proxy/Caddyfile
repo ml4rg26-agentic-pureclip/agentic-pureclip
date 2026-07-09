@@ -1,0 +1,12 @@
+# Reverse proxy fronting the dashboard so the UI and API share one origin.
+# The SPA fetches /api/* relative to its own origin; those are routed to the API,
+# and everything else to the UI. Served over plain HTTP on :80 (published as 8080
+# by compose) — put TLS in front of it (or tunnel over SSH) for remote access.
+:80 {
+	handle /api/* {
+		reverse_proxy api:8888
+	}
+	handle {
+		reverse_proxy ui:3000
+	}
+}

@@ -26,6 +26,8 @@ import yaml
 
 from agentic_pureclip.pipeline.configs import DEFAULT_SEARCH_BOUNDS
 from agentic_pureclip.pipeline.datasets import list_datasets
+from agentic_pureclip.run.launcher import launch_detached, write_manifest
+from agentic_pureclip.run.schedule import ScheduleError, build_manifest
 
 # Keep the dashboard's composite in lock-step with the agent's objective.
 try:
@@ -707,98 +709,27 @@ def _run_active() -> bool:
 def schedule_run(spec: dict) -> tuple[int, dict]:
     """Validate a UI run request, write a manifest, and launch the CLI runner.
 
-    Produces a standard overnight-batch manifest (config/ui_runs/<id>.yaml) and
-    launches scripts/run/overnight_batch.py on it — so the same run can be started
-    from the CLI, and the UI is just a front-end for that path.
+    Shares ``build_manifest`` / ``launch_detached`` with the ``agentic-pureclip-run``
+    CLI, so a run started from the Plan page and one started from the terminal are
+    identical. (In the containerised deployment this path is disabled — see the
+    ``DASHBOARD_READ_ONLY`` guard in ``dashboard.api.main`` — and runs are launched
+    via that CLI instead.)
     """
-    datasets = set(list_datasets())
-    dataset = spec.get("dataset")
-    if dataset not in datasets:
-        return 400, {"ok": False, "error": f"unknown dataset {dataset!r}"}
-
-    optimizer = str(spec.get("optimizer") or "llm").lower()
-    if optimizer not in ("llm", "optuna"):
-        return 400, {"ok": False, "error": "optimizer must be 'llm' or 'optuna'"}
-
     try:
-        max_iter = max(1, min(50, int(spec.get("max_iter", 8))))
-        hours = max(0.1, min(24.0, float(spec.get("hours", 4))))
-        threads = max(1, min(64, int(spec.get("threads", 32))))
-    except (TypeError, ValueError):
-        return 400, {"ok": False, "error": "invalid numeric field"}
-    learn_on_chr21 = bool(spec.get("learn_on_chr21", True))
-
-    weights = {}
-    raw_w = spec.get("weights") or {}
-    for k in ("reproducibility", "motif", "recall"):
-        try:
-            weights[k] = max(0.0, float(raw_w.get(k, DEFAULT_OBJECTIVE_WEIGHTS[k])))
-        except (TypeError, ValueError):
-            weights[k] = DEFAULT_OBJECTIVE_WEIGHTS[k]
-    if sum(weights.values()) <= 0:
-        weights = dict(DEFAULT_OBJECTIVE_WEIGHTS)
-
-    # Validate the requested parameter ranges against the hard default bounds.
-    bounds: dict[str, dict[str, list[int]]] = {}
-    for section, params in (spec.get("bounds") or {}).items():
-        if section not in DEFAULT_SEARCH_BOUNDS:
-            continue
-        for key, rng in (params or {}).items():
-            if key not in DEFAULT_SEARCH_BOUNDS[section]:
-                continue
-            try:
-                lo, hi = int(rng[0]), int(rng[1])
-            except (TypeError, ValueError, IndexError):
-                continue
-            dlo, dhi = DEFAULT_SEARCH_BOUNDS[section][key]
-            lo, hi = max(dlo, min(dhi, lo)), max(dlo, min(dhi, hi))
-            if lo > hi:
-                lo, hi = hi, lo
-            bounds.setdefault(section, {})[key] = [lo, hi]
-    if not bounds:
-        return 400, {"ok": False, "error": "select at least one parameter to optimize"}
+        job_id, manifest, meta = build_manifest(spec)
+    except ScheduleError as exc:
+        return exc.status_code, {"ok": False, "error": str(exc)}
 
     if _run_active():
         return 409, {"ok": False, "busy": True,
                      "error": "A run is already active — wait for it to finish."}
 
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    job_id = f"ui_{dataset.lower()}_{optimizer}_{ts}"
-    manifest = {
-        "defaults": {
-            "max_iter": max_iter,
-            "threads": threads,
-            "learn_on_chr21": learn_on_chr21,
-            "per_job_timeout_min": int(hours * 60),
-            "optimizer": optimizer,
-            "objective_weights": weights,
-            "search_bounds": bounds,
-        },
-        "jobs": [{"id": job_id, "dataset": dataset}],
-    }
-    UI_RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    manifest_path = UI_RUNS_DIR / f"{job_id}.yaml"
-    with open(manifest_path, "w", encoding="utf-8") as handle:
-        yaml.safe_dump(manifest, handle, sort_keys=False)
-
-    env = os.environ.copy()
-    env["PYTHONPATH"] = "."
-    env["PATH"] = f"{PURECLIP_DIR}:{env.get('PATH', '')}"
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    log_handle = open(LOGS_DIR / "ui_scheduled.log", "a", encoding="utf-8")
-    log_handle.write(f"\n=== {ts} launch {job_id} ({optimizer}, {dataset}) ===\n")
-    log_handle.flush()
-    subprocess.Popen(
-        [sys.executable, "scripts/run/overnight_batch.py", "--manifest", str(manifest_path),
-         "--no-repeat", "--hours", str(hours), "--pureclip-dir", PURECLIP_DIR],
-        cwd=str(Path.cwd()), env=env, stdout=log_handle, stderr=subprocess.STDOUT,
-        start_new_session=True,
-    )
-    n_params = sum(len(p) for p in bounds.values())
+    manifest_path = write_manifest(job_id, manifest)
+    launch_detached(job_id, manifest_path, meta["hours"], PURECLIP_DIR)
     return 200, {
         "ok": True,
         "job_id": job_id,
         "manifest": str(manifest_path),
-        "message": f"Scheduled {optimizer.upper()} run on {dataset} "
-                   f"({max_iter} iters, optimizing {n_params} parameter(s)).",
+        "message": f"Scheduled {meta['optimizer'].upper()} run on {meta['dataset']} "
+                   f"({meta['max_iter']} iters, optimizing {meta['n_params']} parameter(s)).",
     }
