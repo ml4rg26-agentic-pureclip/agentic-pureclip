@@ -47,6 +47,27 @@ def test_collect_iterations_finds_nested_llm_reports(tmp_path, monkeypatch):
     assert all(r["composite"] is not None for r in recs)
 
 
+def test_arm_of_labels():
+    mod = _load_module()
+    assert mod.arm_of("optuna", False) == "optuna"
+    assert mod.arm_of("optuna", True) == "optuna"   # optuna never has priors withheld
+    assert mod.arm_of("llm", False) == "llm"
+    assert mod.arm_of("llm", True) == "llm_noprior"
+
+
+def test_collect_iterations_tags_arm(tmp_path, monkeypatch):
+    mod = _load_module()
+    monkeypatch.setattr(mod, "ROOT", tmp_path)
+    results_root = "results/overnight/job3"
+    _write_report(tmp_path / results_root / "s" / "SRSF1_iter_00" / "score_report.json", "SRSF1_iter_00")
+
+    recs = mod.collect_iterations(results_root, "job3", "SRSF1_K562",
+                                  mod.DEFAULT_OBJECTIVE_WEIGHTS, "llm",
+                                  arm="llm_noprior", no_priors=True)
+    assert recs and recs[0]["arm"] == "llm_noprior"
+    assert recs[0]["no_priors"] is True
+
+
 def test_collect_iterations_dedups_by_run_id(tmp_path, monkeypatch):
     """A run_id appearing twice collapses to a single (newest) record."""
     mod = _load_module()

@@ -178,8 +178,19 @@ def _log_tail(path: Path, n_lines: int = 40) -> str:
 
 # ── result collection ───────────────────────────────────────────────────────
 
+def arm_of(optimizer: str, no_priors: bool) -> str:
+    """Label a job's experimental arm so analyses slice cleanly.
+
+    `optimizer` alone can't tell the priors-on LLM from the no-priors LLM; the arm
+    tag distinguishes head-to-head (llm/optuna) from the ablation (llm_noprior).
+    """
+    if optimizer == "optuna":
+        return "optuna"
+    return "llm_noprior" if no_priors else "llm"
+
+
 def collect_iterations(results_root: str, job_id: str, dataset: str, weights: dict,
-                       optimizer: str = "llm") -> list[dict]:
+                       optimizer: str = "llm", arm: str = "llm", no_priors: bool = False) -> list[dict]:
     root = ROOT / results_root
     if not root.exists():
         return []
@@ -202,6 +213,8 @@ def collect_iterations(results_root: str, job_id: str, dataset: str, weights: di
             "job_id": job_id,
             "dataset": dataset,
             "optimizer": optimizer,
+            "arm": arm,
+            "no_priors": no_priors,
             "run_id": run_id,
             "iteration": _iter_index(run_id or ""),
             "n_binding_sites": d.get("n_binding_sites"),
@@ -231,11 +244,15 @@ def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
     started = time.time()
     job_id, cfg, max_iter, results_root, weights, optimizer = build_job_config(job, defaults, pass_idx)
     script = OPTIMIZER_SCRIPTS.get(optimizer, OPTIMIZER_SCRIPTS["llm"])
+    no_priors = bool(job.get("no_priors"))
+    arm = arm_of(optimizer, no_priors)
     record = {
         "type": "job",
         "job_id": job_id,
         "dataset": job["dataset"],
         "optimizer": optimizer,
+        "arm": arm,
+        "no_priors": no_priors,
         "pass": pass_idx,
         "max_iter": max_iter,
         "weights": weights,
@@ -292,7 +309,8 @@ def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
 
     # Always try to collect whatever iterations were scored, even on failure.
     try:
-        iterations = collect_iterations(results_root, job_id, job["dataset"], weights, optimizer)
+        iterations = collect_iterations(results_root, job_id, job["dataset"], weights,
+                                         optimizer, arm=arm, no_priors=no_priors)
     except Exception:
         iterations = []
 
@@ -339,7 +357,7 @@ def _terminate_tree(proc):
 # ── driver ──────────────────────────────────────────────────────────────────
 
 def write_summary(jobs_records: list[dict], path: Path) -> None:
-    cols = ["job_id", "dataset", "optimizer", "pass", "status", "failure_hint", "best_composite",
+    cols = ["job_id", "dataset", "optimizer", "arm", "pass", "status", "failure_hint", "best_composite",
             "iterations_scored", "max_iter", "exit_code", "duration_s"]
     with open(path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=cols, extrasaction="ignore")
