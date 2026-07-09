@@ -126,7 +126,11 @@ def build_decision_prompt(
         if feedback
         else ""
     )
-    return f"""You are optimising PureCLIP parameters for eCLIP data.{feedback_block}
+    return f"""You are analysing eCLIP data for the RNA-binding protein described in
+PRIOR KNOWLEDGE below, tuning a two-stage peak-calling pipeline (PureCLIP + post-
+processing) to recover this protein's true binding sites. Use what is known about
+its binding biology to guide every parameter choice, and keep the recovered sites
+biologically plausible.{feedback_block}
 
 Your goal is to MAXIMISE the COMPOSITE quality score, a weighted blend (weights
 renormalised over the terms present; current weights: {weights_str}) of three
@@ -146,8 +150,21 @@ COLLAPSE GUARD: the composite is multiplied by min(1, n_binding_sites/{DEFAULT_M
 Below {DEFAULT_MIN_SITES} sites the score is ramped toward zero, so a handful of
 "perfect" sites is NOT a win. Keep a healthy number of binding sites.
 
-PRIOR KNOWLEDGE:
+PRIOR KNOWLEDGE (use this to reason about the biology, not just the statistics):
 {json.dumps(priors, indent=2)}
+
+HOW THE BIOLOGY SHOULD INFORM YOUR CHOICES:
+  - Relate bandwidth_nt and force_width to the known motif length and to whether
+    this protein binds in sharp, point-like sites or in broader regions. A short,
+    well-defined motif is poorly served by a very large bandwidth or a very wide
+    force_width, which blur a precise site; a protein binding broad regions
+    tolerates wider settings. force_width should not be so wide that it dilutes a
+    short motif, nor so narrow that it cuts off the binding region.
+  - Let the protein's preferred_binding region (e.g. intron, 3'UTR) and its role in
+    RNA processing inform how permissive to be, alongside the score deltas.
+  - If your reasoning could apply unchanged to any generic signal-processing task
+    without mentioning THIS protein, you have NOT used the prior knowledge. Name the
+    target protein, its motif and its preferred_binding region explicitly.
 
 SEARCH BOUNDS (hard limits, never exceed these):
 {json.dumps(state['search_bounds'], indent=2)}
@@ -162,19 +179,25 @@ PROGRESS (oldest first; d_* are deltas vs the previous attempt):
 {json.dumps(progress, indent=2)}
 
 DECISION RULES:
-1. Read the deltas: keep moving parameters in directions that raised composite,
-   reverse directions that lowered it. Do not assume relaxing or tightening always helps.
-2. Change ONE parameter at a time so the effect is interpretable.
-3. Do not repeat any previous parameter set.
-4. Stay strictly inside the search bounds.
-5. Only change parameters listed in SEARCH BOUNDS.
-6. If reproducibility rose but known_site_recall or motif_hit_rate fell, you are
+1. Ground each choice in this protein's binding biology (motif length, point-like
+   vs broad binding, preferred_binding region) together with the observed deltas —
+   not a fixed assumption that relaxing or tightening always helps.
+2. Read the deltas: keep moving parameters in directions that raised composite,
+   reverse directions that lowered it.
+3. Change ONE parameter at a time so the effect is interpretable.
+4. Do not repeat any previous parameter set, and avoid trivial one-unit changes
+   that do not meaningfully explore the space.
+5. Stay strictly inside the search bounds.
+6. Only change parameters listed in SEARCH BOUNDS.
+7. If reproducibility rose but known_site_recall or motif_hit_rate fell, you are
    likely discarding real sites — prefer reverting or trying a different parameter.
-7. If n_sites is collapsing and recall is dropping, relax stringency (lower
+8. If n_sites is collapsing and recall is dropping, relax stringency (lower
    min_crosslink_events, raise merge_distance_nt) to recover sensitivity.
 
 Respond ONLY with JSON:
-{{"reasoning": "name the trend you saw in the deltas and why you chose this direction",
+{{"reasoning": "reflect on this RBP's role and preferred_binding region, name the
+  trend you saw in the deltas, explain how the biology informs your choice, and why
+  you chose this direction",
   "changes": {{"pureclip": {{...}}, "postprocessing": {{...}}}}}}"""
 
 
