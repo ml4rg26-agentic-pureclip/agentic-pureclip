@@ -277,9 +277,12 @@ if __name__ == "__main__":
         "best_score": 0.0,
         "best_config": base_config,
         "max_iterations": int(os.environ.get("MAX_ITER", "5")),
-        "score_improvement_threshold": 0.01,
+        # Shared early-stop rule (Change 3): stop when best composite hasn't improved
+        # by >= threshold for `patience` consecutive iterations. Env-configurable so
+        # the LLM and Optuna arms share the same rule; default patience=4, delta=0.01.
+        "score_improvement_threshold": float(os.environ.get("SCORE_IMPROVEMENT_THRESHOLD", "0.01")),
         "no_improvement_streak": 0,
-        "patience": 10,
+        "patience": int(os.environ.get("PATIENCE", "4")),
         "termination_reason": None,
     }
     logger.info("Starting Agent Graph")

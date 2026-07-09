@@ -36,6 +36,46 @@ CONFIG_PATH = os.environ.get("CONFIG_PATH", "config/run_config.yaml")
 # Tunables that are booleans in the config (suggested as 0/1, applied as bool).
 BOOL_PARAMS = {("pureclip", "high_precision_mode"), ("pureclip", "use_input_covariate")}
 
+# Shared early-stop rule (Change 3): stop when the best composite hasn't improved by
+# >= threshold for `patience` consecutive trials. To keep it FAIR vs the LLM (which
+# has no random phase), stagnation is only counted AFTER Optuna's random startup
+# trials — before that, "no improvement" is sampling noise, not convergence.
+# STARTUP_TRIALS mirrors TPESampler's default n_startup_trials (10).
+STARTUP_TRIALS = 10
+PATIENCE = int(os.environ.get("PATIENCE", "4"))
+SCORE_IMPROVEMENT_THRESHOLD = float(os.environ.get("SCORE_IMPROVEMENT_THRESHOLD", "0.01"))
+
+
+def _make_early_stop_callback(patience: int, threshold: float, startup: int):
+    """Optuna callback that stops the study on a shared stagnation rule.
+
+    Counting only begins once ``startup`` trials have completed, so the random
+    warm-up phase can't trip an early stop. ``study.stop()`` lets the current trial
+    finish, then halts — mirroring the LLM's patience-based convergence.
+    """
+    tracker = {"best": float("-inf"), "streak": 0}
+
+    def callback(study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
+        value = trial.value
+        if value is None:  # failed trial — don't let it count as (non-)improvement
+            return
+        if value > tracker["best"] + threshold:
+            tracker["best"] = value
+            tracker["streak"] = 0
+            return
+        tracker["best"] = max(tracker["best"], value)
+        if trial.number < startup:
+            return  # still in the random warm-up; noise, not convergence
+        tracker["streak"] += 1
+        if tracker["streak"] >= patience:
+            logger.info(
+                "Optuna early-stop: no improvement > %.3f for %d trials past startup (trial %d)",
+                threshold, patience, trial.number,
+            )
+            study.stop()
+
+    return callback
+
 
 def _with_iteration_output(config: dict) -> dict:
     """Store every trial in its own result directory (mirrors agent/graph.py)."""
@@ -90,8 +130,15 @@ def run_optuna(
     weights: dict[str, float],
     search_bounds: dict = DEFAULT_SEARCH_BOUNDS,
     seed: int = 42,
+    patience: int = PATIENCE,
+    improvement_threshold: float = SCORE_IMPROVEMENT_THRESHOLD,
+    startup_trials: int = STARTUP_TRIALS,
 ) -> optuna.Study:
-    """Run a TPE study for ``max_iter`` trials, maximising the composite objective."""
+    """Run a TPE study for up to ``max_iter`` trials, maximising the composite objective.
+
+    Stops early on the shared stagnation rule (see ``_make_early_stop_callback``);
+    ``patience <= 0`` disables early stopping.
+    """
     priors = base_config.get("priors") or {}
     target = priors.get("target_protein", "RBP")
     best = {"score": float("-inf"), "config": None}
@@ -127,8 +174,14 @@ def run_optuna(
         direction="maximize",
         sampler=optuna.samplers.TPESampler(seed=seed),
     )
-    logger.info("Starting Optuna study: %d trials, target=%s", max_iter, target)
-    study.optimize(objective, n_trials=max_iter)
+    callbacks = []
+    if patience and patience > 0:
+        callbacks.append(_make_early_stop_callback(patience, improvement_threshold, startup_trials))
+    logger.info(
+        "Starting Optuna study: up to %d trials, target=%s (early-stop patience=%d after %d startup)",
+        max_iter, target, patience, startup_trials,
+    )
+    study.optimize(objective, n_trials=max_iter, callbacks=callbacks)
 
     if best["config"] is not None:
         save_config(best["config"], "config/best_config.yaml")
