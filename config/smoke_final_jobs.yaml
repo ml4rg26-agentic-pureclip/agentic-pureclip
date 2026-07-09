@@ -1,0 +1,19 @@
+# Smoke test for the final-results pipeline — a minimal subset to validate the
+# end-to-end run (all three arms + both optimizers) and see result shape before
+# committing to the full 34-job batch. Two FAST crisp datasets (~2-4 min/iter).
+# Run with: --hours 4 --no-repeat
+defaults:
+  threads: 32
+  learn_on_chr21: true
+  per_job_timeout_min: 90
+  objective_weights: {reproducibility: 0.5, motif: 0.25, recall: 0.25}
+  # Early-stop (Change 3): patience=4, delta=0.01 via graph/optuna defaults.
+
+jobs:
+  # QKI — crisp; exercises llm, optuna AND the no-priors ablation (Change 2).
+  - {id: smoke_qki_k562_llm,         dataset: QKI_K562,  optimizer: llm,    max_iter: 16}
+  - {id: smoke_qki_k562_optuna,      dataset: QKI_K562,  optimizer: optuna, max_iter: 16}
+  - {id: smoke_qki_k562_llm_noprior, dataset: QKI_K562,  optimizer: llm,    max_iter: 16, no_priors: true}
+  # PUM1 — crisp; head-to-head only.
+  - {id: smoke_pum1_k562_llm,        dataset: PUM1_K562, optimizer: llm,    max_iter: 16}
+  - {id: smoke_pum1_k562_optuna,     dataset: PUM1_K562, optimizer: optuna, max_iter: 16}
