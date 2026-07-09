@@ -184,7 +184,10 @@ DECISION RULES:
    not a fixed assumption that relaxing or tightening always helps.
 2. Read the deltas: keep moving parameters in directions that raised composite,
    reverse directions that lowered it.
-3. Change ONE parameter at a time so the effect is interpretable.
+3. Prefer changing ONE parameter at a time so its effect stays interpretable, but
+   you MAY change 2-3 together when you have a specific reason to expect them to
+   interact — state what you expect each change to do. Avoid changing many at once,
+   which makes the result impossible to attribute to any single cause.
 4. Do not repeat any previous parameter set, and avoid trivial one-unit changes
    that do not meaningfully explore the space.
 5. Stay strictly inside the search bounds.
