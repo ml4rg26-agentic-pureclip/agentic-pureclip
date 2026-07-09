@@ -4,6 +4,9 @@ import {
   fmtx,
   humanDur,
   clockIn,
+  armMeta,
+  ARM_ORDER,
+  type ArmKey,
   type ActiveRun,
   type Experiment,
   type IterationRow,
@@ -11,6 +14,18 @@ import {
   type Proc,
   type Status,
 } from "../lib/api";
+
+/** Arm of an iteration/job — distinguishes the no-priors LLM from the priors LLM. */
+function armFrom(optimizer?: string, jobId?: string): ArmKey {
+  if ((optimizer || "").toLowerCase() === "optuna") return "optuna";
+  if (jobId && /no[_-]?prior/i.test(jobId)) return "llm_noprior";
+  return "llm";
+}
+
+function ArmBadge({ arm, sm }: { arm?: string; sm?: boolean }) {
+  const m = armMeta(arm);
+  return <span className={`badge ${m.badge}${sm ? " sm" : ""}`}>{m.name} · {m.tag}</span>;
+}
 
 export function meta() {
   return [{ title: "Dashboard · Agentic PureCLIP" }];
@@ -82,7 +97,7 @@ function Kpis({ data }: { data: Status }) {
         <div className="l">Status</div>
         {a.is_active ? (
           <div className="sub">
-            {a.dataset} · {a.optimizer === "optuna" ? "Optuna" : "LLM"} · {a.stage}
+            {a.dataset} · {(() => { const m = armMeta(a.arm ?? a.optimizer); return `${m.name} (${m.tag})`; })()} · {a.stage}
           </div>
         ) : null}
       </div>
@@ -130,12 +145,7 @@ function ActiveCard({ active: a, stages }: { active: ActiveRun; stages: string[]
   const proteinLine = [a.target_protein, a.cell_line].filter(Boolean).join(" · ");
   const m = a.latest ?? ({} as IterationRow);
   const repro = m.reproducibility ?? m.agreement;
-  const optBadge =
-    a.optimizer === "optuna" ? (
-      <span className="badge badge-optuna">OPTUNA · TPE</span>
-    ) : a.optimizer === "llm" ? (
-      <span className="badge badge-llm">LLM</span>
-    ) : null;
+  const optBadge = a.optimizer ? <ArmBadge arm={a.arm ?? a.optimizer} /> : null;
 
   return (
     <section className="section">
@@ -252,7 +262,7 @@ function PlanCard({ plan }: { plan: Plan | null }) {
               <tr key={j.job_id} className={isRun ? "best" : ""}>
                 <td>{i + 1}</td>
                 <td>{j.job_id}</td>
-                <td><OptBadge o={j.optimizer} /></td>
+                <td><ArmBadge arm={armFrom(j.optimizer, j.job_id)} sm /></td>
                 <td>{j.dataset}</td>
                 <td>
                   {isRun ? <span className="badge badge-running">running</span>
@@ -280,23 +290,25 @@ function PlanCard({ plan }: { plan: Plan | null }) {
   );
 }
 
-function OptBadge({ o }: { o?: string }) {
-  return o === "optuna" ? (
-    <span className="badge badge-optuna sm">optuna</span>
-  ) : (
-    <span className="badge badge-llm sm">llm</span>
-  );
-}
-
 /* ── Results: leaderboard + per-dataset detail ────────────────── */
 
-function bestByOptimizer(it: IterationRow[]) {
-  const byOpt: Record<string, number> = {};
+/** Best composite per arm (prior LLM / no-prior LLM / Optuna). */
+function bestByArm(it: IterationRow[]): Partial<Record<ArmKey, number>> {
+  const by: Partial<Record<ArmKey, number>> = {};
   for (const r of it) {
-    const o = r.optimizer || "llm";
-    if (r.composite != null && (byOpt[o] === undefined || r.composite > byOpt[o])) byOpt[o] = r.composite;
+    const a = (r.arm as ArmKey) ?? armFrom(r.optimizer, r.run_id);
+    if (r.composite != null && (by[a] === undefined || r.composite > (by[a] as number))) by[a] = r.composite;
   }
-  return byOpt;
+  return by;
+}
+
+/** Winning arm among those present (needs ≥2 arms), or "tie". */
+function armWinner(by: Partial<Record<ArmKey, number>>): ArmKey | "tie" | null {
+  const present = ARM_ORDER.filter((a) => by[a] !== undefined);
+  if (present.length < 2) return null;
+  const max = Math.max(...present.map((a) => by[a] as number));
+  const tops = present.filter((a) => (by[a] as number) === max);
+  return tops.length > 1 ? "tie" : tops[0];
 }
 
 const CELL_LINES = ["K562", "HepG2"];
@@ -345,11 +357,8 @@ function Leaderboard({ experiments }: { experiments: Experiment[] }) {
             </div>
             {g.exps.map((e) => {
               const { cell } = splitDataset(e.name);
-              const byOpt = bestByOptimizer(e.iterations);
-              const hasBoth = byOpt.llm !== undefined && byOpt.optuna !== undefined;
-              const winner = hasBoth
-                ? byOpt.llm === byOpt.optuna ? "tie" : byOpt.llm > byOpt.optuna ? "llm" : "optuna"
-                : null;
+              const byArm = bestByArm(e.iterations);
+              const winner = armWinner(byArm);
               const comp = e.best_composite ?? 0;
               return (
                 <div className="lb-row" key={e.name}>
@@ -359,10 +368,23 @@ function Leaderboard({ experiments }: { experiments: Experiment[] }) {
                     <span className="lb-comp">{fmt(e.best_composite, 3)}</span>
                   </span>
                   <span className="lb-opt">
-                    <b style={{ color: "var(--blue)" }}>{byOpt.llm !== undefined ? fmt(byOpt.llm, 3) : "—"}</b>
-                    <span className="lb-slash">/</span>
-                    <b style={{ color: "var(--yellow)" }}>{byOpt.optuna !== undefined ? fmt(byOpt.optuna, 3) : "—"}</b>
-                    {winner && <span className={`win ${winner} xs`}>{winner === "tie" ? "=" : winner.toUpperCase()}</span>}
+                    {ARM_ORDER.map((a, i) => {
+                      const mm = armMeta(a);
+                      return (
+                        <span key={a}>
+                          {i > 0 && <span className="lb-slash">/</span>}
+                          <b style={{ color: byArm[a] !== undefined ? mm.color : "var(--muted)" }}
+                            title={`${mm.name} (${mm.tag})`}>
+                            {byArm[a] !== undefined ? fmt(byArm[a], 3) : "—"}
+                          </b>
+                        </span>
+                      );
+                    })}
+                    {winner && (
+                      <span className={`win ${winner} xs`}>
+                        {winner === "tie" ? "=" : winner === "llm_noprior" ? "LLM np" : armMeta(winner).name}
+                      </span>
+                    )}
                   </span>
                   <span className="lb-iters">{e.n_iters} it</span>
                   <Sparkline items={e.iterations} />
@@ -373,9 +395,10 @@ function Leaderboard({ experiments }: { experiments: Experiment[] }) {
         ))}
       </div>
       <div className="lb-legend">
-        <span><i className="lb-swatch llm" /> LLM</span>
+        <span><i className="lb-swatch llm" /> LLM (prior)</span>
+        <span><i className="lb-swatch noprior" /> LLM (no prior)</span>
         <span><i className="lb-swatch optuna" /> Optuna</span>
-        <span>bar = best composite (relative to top dataset {fmt(globalMax, 3)})</span>
+        <span>trio = best composite per arm · bar = best overall (vs top {fmt(globalMax, 3)})</span>
       </div>
     </section>
   );
@@ -414,7 +437,7 @@ function Details({ experiments, active }: { experiments: Experiment[]; active: A
             <table>
               <thead>
                 <tr>
-                  <th>run</th><th>opt</th><th>iter</th><th>sites</th>
+                  <th>run</th><th>arm</th><th>iter</th><th>sites</th>
                   <th>reprod.</th><th>motif</th><th>recall</th><th>composite</th><th>src</th>
                 </tr>
               </thead>
@@ -428,7 +451,7 @@ function Details({ experiments, active }: { experiments: Experiment[]; active: A
                   return (
                     <tr key={it.run_id} className={it.run_id === g.best_run ? "best" : ""}>
                       <td>{it.run_id}</td>
-                      <td><OptBadge o={it.optimizer} /></td>
+                      <td><ArmBadge arm={it.arm ?? armFrom(it.optimizer, it.run_id)} sm /></td>
                       <td>{it.iter ?? "—"}</td>
                       <td>{it.n_sites ?? "—"}</td>
                       <td>{fmt(repro)}</td>

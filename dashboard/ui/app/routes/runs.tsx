@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { fmt, useStatus, type Experiment } from "../lib/api";
+import { fmt, useStatus, armMeta, ARM_ORDER, type ArmKey, type Experiment } from "../lib/api";
 import { BindingLandscape } from "../components/BindingLandscape";
 
 export function meta() {
@@ -42,9 +42,6 @@ interface Run {
   iterations: RunIter[];
 }
 
-type ArmKey = "llm" | "llm_noprior" | "optuna";
-const ARM_ORDER: ArmKey[] = ["llm", "llm_noprior", "optuna"];
-
 function splitDataset(name: string): { rbp: string; cell: string | null } {
   const parts = name.split("_");
   const last = parts[parts.length - 1];
@@ -59,20 +56,6 @@ function armOf(r: Run): ArmKey {
   if ((r.optimizer || "").toLowerCase() === "optuna") return "optuna";
   if (r.no_priors || /no[_-]?prior/i.test(r.job_id)) return "llm_noprior";
   return "llm";
-}
-
-function armMeta(arm: ArmKey) {
-  switch (arm) {
-    case "optuna":
-      return { key: "optuna", name: "Optuna", tag: "TPE", color: "var(--yellow)", badge: "badge-optuna",
-        desc: "Bayesian TPE sampler — the no-domain-knowledge baseline optimizer." };
-    case "llm_noprior":
-      return { key: "llm_noprior", name: "LLM", tag: "no prior", color: "var(--purple)", badge: "badge-noprior",
-        desc: "LLM with the motif/protein prior withheld — the ablation." };
-    default:
-      return { key: "llm", name: "LLM", tag: "prior", color: "var(--blue)", badge: "badge-llm",
-        desc: "LLM guided by the RBP's known motif and biology." };
-  }
 }
 
 /** The iteration that achieved this run's best composite. */

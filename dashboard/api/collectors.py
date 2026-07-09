@@ -203,9 +203,18 @@ def get_active_run(procs: list[dict], cfg: dict) -> dict:
         "force_width": post.get("force_width"),
     }
 
+    # Distinguish the no-priors LLM ablation from the priors LLM.
+    if optimizer is None:
+        arm = None
+    elif job_id:
+        arm = _arm_for(job_id, optimizer)
+    else:
+        arm = optimizer
+
     return {
         "is_active": is_active,
         "optimizer": optimizer,
+        "arm": arm,
         "decide_label": decide_label,
         "job_id": job_id,
         "stage": stage,
@@ -321,6 +330,7 @@ def collect_experiments() -> list[dict]:
         # Per-job optimizer from the run's own decision trail (robust mid-run, before
         # jobs.jsonl records it); falls back to the completed-job map.
         optimizer = _optimizer_for(root, optimizer_map) if source in ("overnight", "batch") else "llm"
+        arm = _arm_for(root.name, optimizer)
         # Recursive: the LLM re-nests reports under a timestamped session subdir (two
         # levels down) while Optuna writes one level down. "*/" alone dropped every
         # LLM iteration; "**/" catches both.
@@ -336,6 +346,7 @@ def collect_experiments() -> list[dict]:
                 "dataset": dataset,
                 "run_id": run_id,
                 "optimizer": optimizer,
+                "arm": arm,
                 "iter": _iter_index(run_id),
                 "n_sites": d.get("n_binding_sites"),
                 "agreement": d.get("replicate_agreement"),

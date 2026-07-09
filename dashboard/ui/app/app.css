@@ -181,6 +181,7 @@ details.section[open] > summary { margin-bottom: 14px; }
 /* Leaderboard cells */
 .win { font-size: 10px; padding: 1px 7px; border-radius: 8px; font-weight: 700; }
 .win.llm { background: rgba(88,166,255,0.16); color: var(--blue); }
+.win.llm_noprior { background: rgba(188,140,255,0.16); color: var(--purple); }
 .win.optuna { background: rgba(210,153,29,0.18); color: var(--yellow); }
 .win.tie { background: rgba(139,148,158,0.16); color: var(--muted); }
 
@@ -377,7 +378,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .lb-rbp { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 2px 2px; }
 .lb-rbp-name { font-weight: 700; font-size: 13px; }
 .lb-rbp-best { font-size: 11px; color: var(--green); font-variant-numeric: tabular-nums; }
-.lb-row { display: grid; grid-template-columns: 62px 1fr 132px 42px 24px; gap: 10px; align-items: center;
+.lb-row { display: grid; grid-template-columns: 62px 1fr 210px 42px 24px; gap: 10px; align-items: center;
   padding: 3px 2px; }
 .lb-cell { font-size: 12px; color: var(--muted); }
 .lb-bar-wrap { position: relative; display: flex; align-items: center; height: 18px;
@@ -392,6 +393,7 @@ input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px;
 .lb-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 10px; }
 .lb-legend i.lb-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
 .lb-swatch.llm { background: var(--blue); }
+.lb-swatch.noprior { background: var(--purple); }
 .lb-swatch.optuna { background: var(--yellow); }
 @media (max-width: 700px) {
   .lb-row { grid-template-columns: 54px 1fr 110px; }
