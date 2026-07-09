@@ -249,6 +249,9 @@ def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
     env["CONFIG_PATH"] = str(cfg_path.relative_to(ROOT))
     env["MAX_ITER"] = str(max_iter)
     env["PYTHONPATH"] = "."
+    if job.get("no_priors"):
+        # Change 2: no-priors ablation — the LLM prompt withholds biological priors.
+        env["LLM_NO_PRIORS"] = "1"
     if extra_path:
         env["PATH"] = f"{extra_path}:{env.get('PATH', '')}"
 

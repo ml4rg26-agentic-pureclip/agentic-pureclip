@@ -47,6 +47,11 @@ CONFIG_PATH = os.environ.get("CONFIG_PATH", "config/run_config.yaml")
 # parameter set before giving up and converging gracefully.
 MAX_DECISION_RETRIES = 3
 
+# Ablation (Change 2): when LLM_NO_PRIORS is set, the decision prompt withholds all
+# biological prior knowledge so we can measure how much the prior actually helps.
+# Only what the LLM *sees* changes — priors are still loaded for run-id/weights/scoring.
+INCLUDE_PRIORS = os.environ.get("LLM_NO_PRIORS", "").strip().lower() not in ("1", "true", "yes")
+
 
 def _with_iteration_output(config: dict) -> dict:
     """Store every agent iteration in its own result directory."""
@@ -88,7 +93,7 @@ def _propose_next_config(state: AgentState, report: dict, weights: dict):
     feedback = None
     decision = None
     for attempt in range(1, MAX_DECISION_RETRIES + 1):
-        resp = llm.invoke(build_decision_prompt(state, report, weights, feedback))
+        resp = llm.invoke(build_decision_prompt(state, report, weights, feedback, include_priors=INCLUDE_PRIORS))
         try:
             decision = parse_decision_response(resp.content)
         except (json.JSONDecodeError, ValueError) as exc:

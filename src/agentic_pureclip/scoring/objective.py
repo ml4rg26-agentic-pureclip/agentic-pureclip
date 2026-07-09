@@ -114,7 +114,16 @@ def build_decision_prompt(
     report: dict[str, Any],
     weights: dict[str, float] | None = None,
     feedback: str | None = None,
+    include_priors: bool = True,
 ) -> str:
+    """Build the LLM decision prompt.
+
+    ``include_priors=False`` runs the no-priors ablation (Change 2): it withholds ALL
+    biological prior knowledge from what the LLM sees — the protein identity, motif,
+    footprint width and preferred region, plus the biology-grounded framing, rule and
+    reasoning instruction. Only the shared "game" (objective weights, search bounds,
+    scores) is kept. Scoring is unaffected: the scorer loads priors independently.
+    """
     weights = weights or DEFAULT_OBJECTIVE_WEIGHTS
     priors = state["current_config"].get("priors") or state["priors"]
     progress = _progress_rows(state, weights)
@@ -126,11 +135,61 @@ def build_decision_prompt(
         if feedback
         else ""
     )
-    return f"""You are analysing eCLIP data for the RNA-binding protein described in
-PRIOR KNOWLEDGE below, tuning a two-stage peak-calling pipeline (PureCLIP + post-
-processing) to recover this protein's true binding sites. Use what is known about
-its binding biology to guide every parameter choice, and keep the recovered sites
-biologically plausible.{feedback_block}
+
+    if include_priors:
+        intro = (
+            "You are analysing eCLIP data for the RNA-binding protein described in\n"
+            "PRIOR KNOWLEDGE below, tuning a two-stage peak-calling pipeline (PureCLIP + post-\n"
+            "processing) to recover this protein's true binding sites. Use what is known about\n"
+            "its binding biology to guide every parameter choice, and keep the recovered sites\n"
+            "biologically plausible."
+        )
+        prior_block = f"""PRIOR KNOWLEDGE (use this to reason about the biology, not just the statistics):
+{json.dumps(priors, indent=2)}
+
+HOW THE BIOLOGY SHOULD INFORM YOUR CHOICES:
+  - Relate bandwidth_nt and force_width to the known motif length and to whether
+    this protein binds in sharp, point-like sites or in broader regions. A short,
+    well-defined motif is poorly served by a very large bandwidth or a very wide
+    force_width, which blur a precise site; a protein binding broad regions
+    tolerates wider settings. force_width should not be so wide that it dilutes a
+    short motif, nor so narrow that it cuts off the binding region.
+  - Let the protein's preferred_binding region (e.g. intron, 3'UTR) and its role in
+    RNA processing inform how permissive to be, alongside the score deltas.
+  - If your reasoning could apply unchanged to any generic signal-processing task
+    without mentioning THIS protein, you have NOT used the prior knowledge. Name the
+    target protein, its motif and its preferred_binding region explicitly."""
+        rule_one = (
+            "Ground each choice in this protein's binding biology (motif length, point-like\n"
+            "   vs broad binding, preferred_binding region) together with the observed deltas —\n"
+            "   not a fixed assumption that relaxing or tightening always helps."
+        )
+        reasoning_instr = (
+            "reflect on this RBP's role and preferred_binding region, name the\n"
+            "  trend you saw in the deltas, explain how the biology informs your choice, and why\n"
+            "  you chose this direction"
+        )
+    else:
+        intro = (
+            "You are tuning a two-stage peak-calling pipeline (PureCLIP + post-processing) to\n"
+            "recover the true binding sites in an eCLIP experiment. NO prior knowledge about the\n"
+            "target protein, its binding motif, footprint width or preferred region is available\n"
+            "— reason purely from the observed scores and how they respond to parameter changes."
+        )
+        prior_block = (
+            "PRIOR KNOWLEDGE: withheld for this run. No protein identity, motif, footprint\n"
+            "width or preferred transcript region is provided — optimise from the score deltas\n"
+            "alone."
+        )
+        rule_one = (
+            "Ground each choice in the observed deltas and the collapse guard — not a fixed\n"
+            "   assumption that relaxing or tightening always helps."
+        )
+        reasoning_instr = (
+            "name the trend you saw in the deltas and explain why you chose this direction"
+        )
+
+    return f"""{intro}{feedback_block}
 
 Your goal is to MAXIMISE the COMPOSITE quality score, a weighted blend (weights
 renormalised over the terms present; current weights: {weights_str}) of three
@@ -150,21 +209,7 @@ COLLAPSE GUARD: the composite is multiplied by min(1, n_binding_sites/{DEFAULT_M
 Below {DEFAULT_MIN_SITES} sites the score is ramped toward zero, so a handful of
 "perfect" sites is NOT a win. Keep a healthy number of binding sites.
 
-PRIOR KNOWLEDGE (use this to reason about the biology, not just the statistics):
-{json.dumps(priors, indent=2)}
-
-HOW THE BIOLOGY SHOULD INFORM YOUR CHOICES:
-  - Relate bandwidth_nt and force_width to the known motif length and to whether
-    this protein binds in sharp, point-like sites or in broader regions. A short,
-    well-defined motif is poorly served by a very large bandwidth or a very wide
-    force_width, which blur a precise site; a protein binding broad regions
-    tolerates wider settings. force_width should not be so wide that it dilutes a
-    short motif, nor so narrow that it cuts off the binding region.
-  - Let the protein's preferred_binding region (e.g. intron, 3'UTR) and its role in
-    RNA processing inform how permissive to be, alongside the score deltas.
-  - If your reasoning could apply unchanged to any generic signal-processing task
-    without mentioning THIS protein, you have NOT used the prior knowledge. Name the
-    target protein, its motif and its preferred_binding region explicitly.
+{prior_block}
 
 SEARCH BOUNDS (hard limits, never exceed these):
 {json.dumps(state['search_bounds'], indent=2)}
@@ -179,9 +224,7 @@ PROGRESS (oldest first; d_* are deltas vs the previous attempt):
 {json.dumps(progress, indent=2)}
 
 DECISION RULES:
-1. Ground each choice in this protein's binding biology (motif length, point-like
-   vs broad binding, preferred_binding region) together with the observed deltas —
-   not a fixed assumption that relaxing or tightening always helps.
+1. {rule_one}
 2. Read the deltas: keep moving parameters in directions that raised composite,
    reverse directions that lowered it.
 3. Prefer changing ONE parameter at a time so its effect stays interpretable, but
@@ -198,9 +241,7 @@ DECISION RULES:
    min_crosslink_events, raise merge_distance_nt) to recover sensitivity.
 
 Respond ONLY with JSON:
-{{"reasoning": "reflect on this RBP's role and preferred_binding region, name the
-  trend you saw in the deltas, explain how the biology informs your choice, and why
-  you chose this direction",
+{{"reasoning": "{reasoning_instr}",
   "changes": {{"pureclip": {{...}}, "postprocessing": {{...}}}}}}"""
 
 
