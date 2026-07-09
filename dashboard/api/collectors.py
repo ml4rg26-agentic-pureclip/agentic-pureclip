@@ -281,6 +281,17 @@ def _find_decisions(job_dir: Path) -> Path | None:
     return nested[0] if nested else None
 
 
+def _arm_for(job_id: str, optimizer: str) -> str:
+    """Comparison arm: optuna, the no-priors LLM ablation, or the priors LLM.
+    Mirrors overnight_batch.arm_of but derives no_priors from the job_id suffix
+    (manifests name jobs ``..._llm`` / ``..._optuna`` / ``..._llm_noprior``)."""
+    if optimizer == "optuna":
+        return "optuna"
+    if re.search(r"no[_-]?prior", job_id, re.I):
+        return "llm_noprior"
+    return "llm"
+
+
 def _optimizer_for(job_dir: Path, opt_map: dict[str, str]) -> str:
     """Resolve a job's optimizer. Prefer the run's own decision trail — it records
     ``optimizer`` per iteration and exists while the job is still running — so an
@@ -605,10 +616,14 @@ def collect_runs() -> list[dict]:
             entry["changed"] = _param_diff(prev, entry["params"])
             prev = entry["params"]
         comps = [i["composite"] for i in iters if i["composite"] is not None]
+        optimizer = _optimizer_for(d, opt_map)
+        arm = _arm_for(d.name, optimizer)
         runs.append({
             "job_id": d.name,
             "dataset": dataset or _strip_iter(d.name),
-            "optimizer": _optimizer_for(d, opt_map),
+            "optimizer": optimizer,
+            "arm": arm,
+            "no_priors": arm == "llm_noprior",
             "n_iters": len(iters),
             "best_composite": max(comps) if comps else None,
             "iterations": iters,
