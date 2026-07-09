@@ -36,14 +36,6 @@ interface ParamState {
   key: string;
 }
 
-interface SubmitResult {
-  ok: boolean;
-  message?: string;
-  error?: string;
-  job_id?: string;
-  busy?: boolean;
-}
-
 export default function Plan() {
   const [opts, setOpts] = useState<Options | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
@@ -57,8 +49,8 @@ export default function Plan() {
   const [weights, setWeights] = useState({ reproducibility: 0.5, motif: 0.25, recall: 0.25 });
   const [params, setParams] = useState<Record<string, ParamState>>({});
 
-  const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<SubmitResult | null>(null);
+  const [command, setCommand] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/options`)
@@ -84,31 +76,38 @@ export default function Plan() {
 
   function setParam(id: string, patch: Partial<ParamState>) {
     setParams((p) => ({ ...p, [id]: { ...p[id], ...patch } }));
+    setCommand(null); // any edit invalidates a previously generated command
   }
 
-  async function submit() {
-    setSubmitting(true);
-    setResult(null);
-    const bounds: Bounds = {};
+  // Build the `agentic-pureclip-run` invocation that reproduces this form.
+  function buildCommand(): string {
+    const parts = [
+      "uv run agentic-pureclip-run",
+      `--dataset ${dataset}`,
+      `--optimizer ${optimizer}`,
+      `--max-iter ${maxIter}`,
+      `--hours ${hours}`,
+      `--threads ${threads}`,
+      chr21 ? "--chr21" : "--no-chr21",
+    ];
+    for (const k of ["reproducibility", "motif", "recall"] as const) {
+      parts.push(`--weight ${k}=${weights[k]}`);
+    }
     for (const p of Object.values(params)) {
       if (!p.enabled) continue;
-      (bounds[p.section] ||= {} as Record<string, [number, number]>)[p.key] = [p.lo, p.hi];
+      parts.push(`--param ${p.section}.${p.key}=${p.lo}:${p.hi}`);
     }
+    return parts.join(" ");
+  }
+
+  async function copyCommand() {
+    if (!command) return;
     try {
-      const res = await fetch(`${API_BASE}/api/schedule`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dataset, optimizer, max_iter: maxIter, hours, threads,
-          learn_on_chr21: chr21, weights, bounds,
-        }),
-      });
-      const data = (await res.json()) as SubmitResult;
-      setResult(data);
-    } catch (e) {
-      setResult({ ok: false, error: e instanceof Error ? e.message : String(e) });
-    } finally {
-      setSubmitting(false);
+      await navigator.clipboard.writeText(command);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard may be unavailable over plain HTTP — the box is selectable anyway */
     }
   }
 
@@ -135,21 +134,14 @@ export default function Plan() {
     <>
       <div className="page-title">Plan run</div>
       <div className="page-sub">
-        Configure a parameter search and launch it on the server. This writes a standard manifest and
-        runs the same CLI optimizer (<code>scripts/run/overnight_batch.py</code>), so it stays CLI-compatible.
+        Configure a parameter search, then copy the generated command and run it on the runner
+        (<code>ssh bio</code>, from the repo root). The dashboard is read-only monitoring — it doesn’t
+        launch jobs itself; the <code>agentic-pureclip-run</code> CLI writes the standard manifest and
+        starts the same optimizer (<code>scripts/run/overnight_batch.py</code>).
       </div>
 
-      {result?.ok ? (
-        <div className="banner ok">
-          ✓ {result.message}{" "}
-          <Link to="/" style={{ fontWeight: 700 }}>Watch it on the Dashboard →</Link>
-        </div>
-      ) : result?.busy ? (
-        <div className="banner warn">⏳ {result.error}</div>
-      ) : result && !result.ok ? (
-        <div className="banner err">✕ {result.error}</div>
-      ) : opts.run_active ? (
-        <div className="banner warn">A run is currently active — you can plan one, but it can only start once the current run finishes.</div>
+      {opts.run_active ? (
+        <div className="banner warn">A run is currently active — a new run will only start once the current one finishes.</div>
       ) : null}
 
       <section className="section">
@@ -157,13 +149,13 @@ export default function Plan() {
         <div className="form-row">
           <div className="field">
             <label>Dataset</label>
-            <select value={dataset} onChange={(e) => setDataset(e.target.value)}>
+            <select value={dataset} onChange={(e) => { setDataset(e.target.value); setCommand(null); }}>
               {opts.datasets.map((d) => <option key={d} value={d}>{d}</option>)}
             </select>
           </div>
           <div className="field">
             <label>Optimizer</label>
-            <select value={optimizer} onChange={(e) => setOptimizer(e.target.value)}>
+            <select value={optimizer} onChange={(e) => { setOptimizer(e.target.value); setCommand(null); }}>
               <option value="llm">LLM agent (DeepSeek)</option>
               <option value="optuna">Optuna (TPE / Bayesian)</option>
             </select>
@@ -171,22 +163,22 @@ export default function Plan() {
           <div className="field">
             <label>Iterations / trials</label>
             <input type="number" min={1} max={50} value={maxIter}
-              onChange={(e) => setMaxIter(+e.target.value)} />
+              onChange={(e) => { setMaxIter(+e.target.value); setCommand(null); }} />
           </div>
           <div className="field">
             <label>Time budget (h)</label>
             <input type="number" min={0.1} max={24} step={0.5} value={hours}
-              onChange={(e) => setHours(+e.target.value)} />
+              onChange={(e) => { setHours(+e.target.value); setCommand(null); }} />
           </div>
           <div className="field">
             <label>Threads</label>
             <input type="number" min={1} max={64} value={threads}
-              onChange={(e) => setThreads(+e.target.value)} />
+              onChange={(e) => { setThreads(+e.target.value); setCommand(null); }} />
           </div>
           <div className="field">
             <label>chr21 fast mode</label>
             <label style={{ display: "flex", alignItems: "center", gap: 8, height: 32 }}>
-              <input type="checkbox" checked={chr21} onChange={(e) => setChr21(e.target.checked)} />
+              <input type="checkbox" checked={chr21} onChange={(e) => { setChr21(e.target.checked); setCommand(null); }} />
               <span className="phelp">restrict to chr21 (much faster)</span>
             </label>
           </div>
@@ -203,7 +195,7 @@ export default function Plan() {
             <div className="field" key={k}>
               <label>{k}</label>
               <input type="number" min={0} max={1} step={0.05} value={weights[k]}
-                onChange={(e) => setWeights((w) => ({ ...w, [k]: +e.target.value }))} />
+                onChange={(e) => { setWeights((w) => ({ ...w, [k]: +e.target.value })); setCommand(null); }} />
             </div>
           ))}
         </div>
@@ -234,13 +226,33 @@ export default function Plan() {
       </section>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-        <button className="btn" disabled={submitting || !dataset || nSelected === 0} onClick={submit}>
-          {submitting ? "Scheduling…" : "▶ Schedule run"}
+        <button className="btn" disabled={!dataset || nSelected === 0} onClick={() => setCommand(buildCommand())}>
+          ▶ Generate CLI command
         </button>
         <span className="page-sub" style={{ margin: 0 }}>
-          {nSelected === 0 ? "Select at least one parameter." : `Launches ${optimizer.toUpperCase()} on ${dataset}.`}
+          {nSelected === 0 ? "Select at least one parameter." : `Builds an ${optimizer.toUpperCase()} run on ${dataset}.`}
         </span>
       </div>
+
+      {command ? (
+        <section className="section">
+          <h2>④ Run it on the runner</h2>
+          <div className="page-sub" style={{ marginTop: -8 }}>
+            Copy this and run it from the repo root on <code>bio</code>. It launches the run in the
+            background and prints a job id + log path; the Dashboard then tracks it live.
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <pre style={{
+              flex: 1, margin: 0, padding: "12px 14px", background: "var(--panel, #0d1117)",
+              border: "1px solid var(--border, #30363d)", borderRadius: 8, overflowX: "auto",
+              whiteSpace: "pre-wrap", wordBreak: "break-all", fontSize: 12.5, lineHeight: 1.5,
+            }}>{command}</pre>
+            <button className="btn" onClick={copyCommand} style={{ whiteSpace: "nowrap" }}>
+              {copied ? "✓ Copied" : "Copy"}
+            </button>
+          </div>
+        </section>
+      ) : null}
     </>
   );
 }

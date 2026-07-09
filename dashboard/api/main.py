@@ -16,6 +16,7 @@ Run it from the repository root (the collectors read ``results/`` and
 from __future__ import annotations
 
 import json
+import os
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -99,6 +100,15 @@ def report_html(dataset: str = "", download: bool = True) -> Response:
 @app.post("/api/schedule")
 async def schedule(request: Request) -> Response:
     """Validate a UI run request, write a manifest and launch the CLI runner."""
+    # In a containerised (monitor-only) deployment the API cannot launch the host
+    # pipeline (no toolchain, and it would die with the container), and the data
+    # mounts are read-only — so refuse cleanly instead of failing on a manifest write.
+    if os.environ.get("DASHBOARD_READ_ONLY"):
+        return JSONResponse(
+            {"ok": False, "error": "Scheduling is disabled in this deployment; "
+                                   "launch runs from the CLI on the host."},
+            status_code=403,
+        )
     raw = await request.body()
     try:
         spec = json.loads(raw or b"{}")

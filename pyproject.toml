@@ -22,6 +22,10 @@ dependencies = [
     "uvicorn>=0.29",
 ]
 
+[project.scripts]
+# Launch a parameter-search run from the terminal (the CLI the dashboard emits).
+agentic-pureclip-run = "agentic_pureclip.run.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

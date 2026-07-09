@@ -1,0 +1,63 @@
+# Production deployment for the monitoring dashboard (see dashboard/README.md).
+#
+#   docker compose up -d --build          # from the repo root
+#   → dashboard on http://localhost:8080  (tunnel that one port: ssh -L 8080:localhost:8080 bio)
+#
+# This is a *monitor-only* deployment: it serves live run data and status. It does
+# NOT launch pipeline jobs — the "Plan run" button is disabled (POST /api/schedule
+# returns 403). Start optimisation runs from the CLI on the host as usual; the API
+# reads their results/ and config/ (mounted read-only) and reports live status.
+services:
+  # FastAPI data provider. `pid: host` lets its `ps` scan see the host's pipeline
+  # processes (pureclip2 / snakemake / overnight_batch / agentic_pureclip.loop.*),
+  # which is how /api/status derives the active run, stage and elapsed time.
+  api:
+    build:
+      context: .
+      dockerfile: dashboard/api/Dockerfile
+    pid: "host"
+    environment:
+      DASHBOARD_READ_ONLY: "1"
+    volumes:
+      - ./results:/app/results:ro
+      - ./config:/app/config:ro
+    restart: unless-stopped
+    expose:
+      - "8888"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8888/api/status').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # React Router SPA (static, server-rendered shell). Talks to the API over
+  # relative /api/* URLs, which the proxy routes — so no baked-in API URL.
+  ui:
+    build:
+      context: dashboard/ui
+    environment:
+      PORT: "3000"
+    restart: unless-stopped
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Single public origin: /api/* -> api, everything else -> ui. Only this port is
+  # published, so tunnelling 8080 gives you the whole dashboard.
+  proxy:
+    image: caddy:2-alpine
+    depends_on:
+      - api
+      - ui
+    ports:
+      - "8080:80"
+    volumes:
+      - ./dashboard/proxy/Caddyfile:/etc/caddy/Caddyfile:ro
+    restart: unless-stopped
