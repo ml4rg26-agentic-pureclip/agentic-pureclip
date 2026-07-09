@@ -60,7 +60,27 @@ UI_RUNS_DIR = Path("config/ui_runs")
 
 # Where the pureclip2 binary lives (prepended to PATH for scheduled runs).
 PURECLIP_DIR = os.environ.get("MONITOR_PURECLIP_DIR", "/vol/storage1/johannes/projects")
+# This deployment's repo root. On the shared VM the API runs with pid:host, so its
+# `ps` scan sees *every* user's processes — including other projects that happen to
+# use the same generic tools (snakemake, pureclip2). We only count a process as ours
+# if its args reference this root, our module namespace, our scripts, or our result
+# dirs — otherwise a neighbour's `snakemake` was being reported as our active run.
+PROJECT_ROOT = os.environ.get("MONITOR_PROJECT_ROOT", "/vol/storage1/johannes/projects/agentic-pureclip")
 HEAVY_PROC_KEYS = ("agentic_pureclip.loop.graph", "agentic_pureclip.loop.optuna_runner", "pureclip2", "overnight_batch.py")
+# Unambiguously-ours processes whose presence means an optimisation loop of *ours*
+# is actually running (a lone orphaned pureclip2/snakemake does not count).
+OWN_ACTIVE_KEYS = ("agentic_pureclip.loop.graph", "agentic_pureclip.loop.optuna_runner",
+                   "overnight_batch.py", "batch_runner")
+
+
+def _is_own_process(args: str) -> bool:
+    """Whether a `ps` args line belongs to this deployment (vs. a co-tenant's)."""
+    return (
+        PROJECT_ROOT in args                       # absolute paths into our repo
+        or "agentic_pureclip." in args             # our python module namespace
+        or "overnight_batch.py" in args or "batch_runner" in args
+        or "results/overnight/" in args or "results/batch/" in args  # our output dirs (relative-path pureclip2)
+    )
 
 # Ordered pipeline stages of a single optimisation iteration.
 STAGES = ["PureCLIP", "Postprocess", "Score", "LLM decide"]
@@ -100,6 +120,8 @@ def get_processes() -> list[dict]:
             continue
         if not any(k in args for k in keys):
             continue
+        if not _is_own_process(args):
+            continue  # a co-tenant's snakemake/pureclip2 on the shared host — not ours
         if "pureclip2" in args:
             label = "PureCLIP"
             m = re.search(r"ip_(rep\d+)", args)
@@ -130,7 +152,10 @@ def get_processes() -> list[dict]:
 
 def get_active_run(procs: list[dict], cfg: dict) -> dict:
     joined = " ".join(p["args"] for p in procs)
-    is_active = bool(procs)
+    # "Active" means one of *our* loop/orchestrator processes is running — not merely
+    # that some matched process exists (an orphaned pureclip2 left by a timed-out job,
+    # for instance, should read Idle, not Running).
+    is_active = any(k in joined for k in OWN_ACTIVE_KEYS)
 
     # Which optimizer is driving the loop?
     if "agentic_pureclip.loop.optuna_runner" in joined:
