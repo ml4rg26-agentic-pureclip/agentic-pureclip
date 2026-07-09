@@ -182,13 +182,33 @@ changed + reasoning, from `decisions.jsonl`), **Plan run** (pick dataset, params
 
 ---
 
-## 5. Compute VM & dashboard ops (`ssh bio`)
+## 5. Compute VM & dashboard ops (Tailscale)
 
-- Host alias `bio` → VM `agenticpureclipvm-751a3` (32 cores, 251 GB RAM). Project
-  at `/vol/storage1/johannes/projects/agentic-pureclip`.
+- VM `agenticpureclipvm-751a3` (32 cores, ~251 GB RAM). Project at
+  `/vol/storage1/johannes/projects/agentic-pureclip`. Full runbook:
+  `docs/deploy-a-new-batch-job.md`.
+- **Access is over Tailscale, not the `ssh bio` alias.** The de.NBI gateway
+  (`194.94.4.28:30121`, in `~/.ssh/config` as `bio`) refuses us — it only admits
+  registered project users. Reach the VM on the tailnet instead:
+  `ssh -i ~/.ssh/id_ed25519 ubuntu@100.87.34.54` (VM tailnet IP; account
+  `johannesstephan36@`). Bring the Mac onto the tailnet with
+  `sudo brew services start tailscale` then `tailscale up`. Our pubkey
+  `jopast@js-mac-book-pro` is in the VM's `authorized_keys`. (The `ssh bio …`
+  examples below still work **only** if you re-point that host's `HostName` to
+  `100.87.34.54`; otherwise substitute `ubuntu@100.87.34.54`.)
+- **Root disk is ~96% full (927 MB free); `/vol/storage1` has ~500 GB.** Keep all
+  work — repo, data, results — on `/vol/storage1`. `mv` between result dirs there
+  is instant (same filesystem), which is how old results get archived to
+  `results/archive/` before a fresh batch.
 - The runner copy is **not a git checkout** (git commands fail there) — it's
-  deployed by copying files in. To ship a local fix, `scp` the file(s) directly,
-  e.g. `scp pipeline/motifs.py bio:/vol/storage1/johannes/projects/agentic-pureclip/pipeline/`.
+  deployed by copying files in. Ship local changes with **rsync** (keeps
+  data/results/.env/.venv intact):
+  ```bash
+  rsync -av --exclude .git --exclude .venv --exclude data --exclude results \
+    --exclude .env --exclude '__pycache__' --exclude '*.pyc' \
+    -e "ssh -i ~/.ssh/id_ed25519" ./ ubuntu@100.87.34.54:/vol/storage1/johannes/projects/agentic-pureclip/
+  ```
+  (or `scp` a single file for a quick one-off fix).
 - **Non-interactive SSH does not source the interactive PATH.** A bare
   `ssh bio '… uv run …'` fails with `uv: command not found`, then
   `ModuleNotFoundError: pipeline`, then `pureclip2: command not found`. To launch
