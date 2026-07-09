@@ -23,6 +23,7 @@ priors:
     - pattern: ACUAAY
       type: target
   primary_objective_metric: replicate_agreement
+  preferred_binding: intron
 pureclip:
   bandwidth_nt: 50
   merge_distance_nt: 8
