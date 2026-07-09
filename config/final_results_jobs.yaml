@@ -1,0 +1,56 @@
+# Final results batch — fair LLM vs Optuna (+ LLM no-priors ablation) across the
+# motif-difficulty axis, in two cell lines. One launch produces all results.
+defaults:
+  threads: 32
+  learn_on_chr21: true
+  per_job_timeout_min: 300   # RAISED from 150: a 16-iter RBFOX2 job runs ~3-4 h;
+                             # the old 150-min cap would truncate the expensive ones.
+  objective_weights: {reproducibility: 0.5, motif: 0.25, recall: 0.25}
+  # Early-stop (Change 3): patience=4, delta=0.01; Optuna counts only after its 10
+  # startup trials. Wired via env / runner change, not per-job fields here.
+
+jobs:
+  # ============================ K562 ============================
+  # RBFOX2 — crisp (+ no-priors)
+  - {id: final_rbfox2_k562_llm,         dataset: RBFOX2_K562, optimizer: llm,    max_iter: 16}
+  - {id: final_rbfox2_k562_optuna,      dataset: RBFOX2_K562, optimizer: optuna, max_iter: 16}
+  - {id: final_rbfox2_k562_llm_noprior, dataset: RBFOX2_K562, optimizer: llm,    max_iter: 16, no_priors: true}
+  # QKI — crisp
+  - {id: final_qki_k562_llm,            dataset: QKI_K562,    optimizer: llm,    max_iter: 16}
+  - {id: final_qki_k562_optuna,         dataset: QKI_K562,    optimizer: optuna, max_iter: 16}
+  # PUM1 — crisp
+  - {id: final_pum1_k562_llm,           dataset: PUM1_K562,   optimizer: llm,    max_iter: 16}
+  - {id: final_pum1_k562_optuna,        dataset: PUM1_K562,   optimizer: optuna, max_iter: 16}
+  # PUM2 — crisp control (+ no-priors)
+  - {id: final_pum2_k562_llm,           dataset: PUM2_K562,   optimizer: llm,    max_iter: 16}
+  - {id: final_pum2_k562_optuna,        dataset: PUM2_K562,   optimizer: optuna, max_iter: 16}
+  - {id: final_pum2_k562_llm_noprior,   dataset: PUM2_K562,   optimizer: llm,    max_iter: 16, no_priors: true}
+  # HNRNPK — degenerate (+ no-priors)
+  - {id: final_hnrnpk_k562_llm,         dataset: HNRNPK_K562, optimizer: llm,    max_iter: 16}
+  - {id: final_hnrnpk_k562_optuna,      dataset: HNRNPK_K562, optimizer: optuna, max_iter: 16}
+  - {id: final_hnrnpk_k562_llm_noprior, dataset: HNRNPK_K562, optimizer: llm,    max_iter: 16, no_priors: true}
+  # SRSF1 — degenerate (+ no-priors)
+  - {id: final_srsf1_k562_llm,          dataset: SRSF1_K562,  optimizer: llm,    max_iter: 16}
+  - {id: final_srsf1_k562_optuna,       dataset: SRSF1_K562,  optimizer: optuna, max_iter: 16}
+  - {id: final_srsf1_k562_llm_noprior,  dataset: SRSF1_K562,  optimizer: llm,    max_iter: 16, no_priors: true}
+  # U2AF2 — positional (+ no-priors)
+  - {id: final_u2af2_k562_llm,          dataset: U2AF2_K562,  optimizer: llm,    max_iter: 16}
+  - {id: final_u2af2_k562_optuna,       dataset: U2AF2_K562,  optimizer: optuna, max_iter: 16}
+  - {id: final_u2af2_k562_llm_noprior,  dataset: U2AF2_K562,  optimizer: llm,    max_iter: 16, no_priors: true}
+  # SF3B4 — positional (+ no-priors)
+  - {id: final_sf3b4_k562_llm,          dataset: SF3B4_K562,  optimizer: llm,    max_iter: 16}
+  - {id: final_sf3b4_k562_optuna,       dataset: SF3B4_K562,  optimizer: optuna, max_iter: 16}
+  - {id: final_sf3b4_k562_llm_noprior,  dataset: SF3B4_K562,  optimizer: llm,    max_iter: 16, no_priors: true}
+  # ==================== HepG2 (head-to-head only) ====================
+  - {id: final_rbfox2_hepg2_llm,        dataset: RBFOX2_HepG2, optimizer: llm,    max_iter: 16}
+  - {id: final_rbfox2_hepg2_optuna,     dataset: RBFOX2_HepG2, optimizer: optuna, max_iter: 16}
+  - {id: final_qki_hepg2_llm,           dataset: QKI_HepG2,    optimizer: llm,    max_iter: 16}
+  - {id: final_qki_hepg2_optuna,        dataset: QKI_HepG2,    optimizer: optuna, max_iter: 16}
+  - {id: final_hnrnpk_hepg2_llm,        dataset: HNRNPK_HepG2, optimizer: llm,    max_iter: 16}
+  - {id: final_hnrnpk_hepg2_optuna,     dataset: HNRNPK_HepG2, optimizer: optuna, max_iter: 16}
+  - {id: final_srsf1_hepg2_llm,         dataset: SRSF1_HepG2,  optimizer: llm,    max_iter: 16}
+  - {id: final_srsf1_hepg2_optuna,      dataset: SRSF1_HepG2,  optimizer: optuna, max_iter: 16}
+  - {id: final_u2af2_hepg2_llm,         dataset: U2AF2_HepG2,  optimizer: llm,    max_iter: 16}
+  - {id: final_u2af2_hepg2_optuna,      dataset: U2AF2_HepG2,  optimizer: optuna, max_iter: 16}
+  - {id: final_sf3b4_hepg2_llm,         dataset: SF3B4_HepG2,  optimizer: llm,    max_iter: 16}
+  - {id: final_sf3b4_hepg2_optuna,      dataset: SF3B4_HepG2,  optimizer: optuna, max_iter: 16}
