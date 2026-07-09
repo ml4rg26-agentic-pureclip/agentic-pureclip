@@ -270,6 +270,35 @@ def _overnight_optimizers() -> dict[str, str]:
     return mapping
 
 
+def _find_decisions(job_dir: Path) -> Path | None:
+    """The run's decision trail. Optuna writes ``<job>/decisions.jsonl``; the LLM
+    re-nests it under a timestamped session subdir, so fall back to a recursive
+    search (newest wins)."""
+    direct = job_dir / "decisions.jsonl"
+    if direct.exists():
+        return direct
+    nested = sorted(job_dir.glob("**/decisions.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return nested[0] if nested else None
+
+
+def _optimizer_for(job_dir: Path, opt_map: dict[str, str]) -> str:
+    """Resolve a job's optimizer. Prefer the run's own decision trail — it records
+    ``optimizer`` per iteration and exists while the job is still running — so an
+    in-flight Optuna job isn't mislabeled ``llm`` just because ``jobs.jsonl`` only
+    gets its record at completion. Fall back to the completed-job map, then ``llm``."""
+    dj = _find_decisions(job_dir)
+    if dj is not None:
+        try:
+            for line in dj.read_text().splitlines():
+                if line.strip():
+                    opt = json.loads(line).get("optimizer")
+                    if opt:
+                        return str(opt).lower()
+        except Exception:
+            pass
+    return (opt_map.get(job_dir.name) or "llm").lower()
+
+
 def collect_experiments() -> list[dict]:
     """Group every score_report.json by dataset into iteration trajectories."""
     rows = []
@@ -278,9 +307,13 @@ def collect_experiments() -> list[dict]:
         if not root.exists():
             continue
         source = _source_label(root)
-        # For overnight roots, root.name is the job_id -> look up its optimizer.
-        optimizer = optimizer_map.get(root.name, "llm") if source == "overnight" else "llm"
-        for report in root.glob("*/score_report.json"):
+        # Per-job optimizer from the run's own decision trail (robust mid-run, before
+        # jobs.jsonl records it); falls back to the completed-job map.
+        optimizer = _optimizer_for(root, optimizer_map) if source in ("overnight", "batch") else "llm"
+        # Recursive: the LLM re-nests reports under a timestamped session subdir (two
+        # levels down) while Optuna writes one level down. "*/" alone dropped every
+        # LLM iteration; "**/" catches both.
+        for report in root.glob("**/score_report.json"):
             try:
                 d = json.loads(report.read_text())
             except Exception:
@@ -522,12 +555,21 @@ def collect_runs() -> list[dict]:
     opt_map = _overnight_optimizers()
     runs = []
     for d in job_dirs:
-        reports = sorted(d.glob("*/score_report.json"), key=lambda p: p.stat().st_mtime)
+        # Recursive: the LLM re-nests reports under a timestamped session subdir; a
+        # one-level glob silently dropped every LLM run (and its reasoning). De-dup by
+        # run_id, newest report wins, in case a run_id recurs across re-nested sessions.
+        by_run: dict[str, tuple[float, Path]] = {}
+        for rp in d.glob("**/score_report.json"):
+            key = rp.parent.name
+            mtime = rp.stat().st_mtime
+            if key not in by_run or mtime > by_run[key][0]:
+                by_run[key] = (mtime, rp)
+        reports = [p for _, p in sorted(by_run.values())]
         if not reports:
             continue
         decisions: dict = {}
-        dj = d / "decisions.jsonl"
-        if dj.exists():
+        dj = _find_decisions(d)
+        if dj is not None:
             try:
                 for line in dj.read_text().splitlines():
                     if line.strip():
@@ -535,7 +577,7 @@ def collect_runs() -> list[dict]:
                         decisions[rec.get("iteration")] = rec
             except Exception:
                 pass
-        iters, prev, dataset = [], None, None
+        iters, dataset = [], None
         for rp in reports:
             try:
                 rep = json.loads(rp.read_text())
@@ -544,12 +586,10 @@ def collect_runs() -> list[dict]:
             dataset = dataset or rep.get("dataset_id")
             run_id = rep.get("run_id") or rp.parent.name
             it = _iter_index(run_id)
-            params = rep.get("params") or {}
             iters.append({
                 "iter": it,
                 "run_id": run_id,
-                "params": params,
-                "changed": _param_diff(prev, params),
+                "params": rep.get("params") or {},
                 "reproducibility": rep.get("reproducibility_score"),
                 "motif": rep.get("motif_hit_rate"),
                 "recall": rep.get("benchmark_region_recall"),
@@ -557,12 +597,18 @@ def collect_runs() -> list[dict]:
                 "composite": round(composite_objective(rep), 4),
                 "reasoning": (decisions.get(it) or {}).get("reasoning"),
             })
-            prev = params
+        # Order by iteration index so param diffs compare consecutive iterations
+        # (recursive globbing can return reports out of iteration order).
+        iters.sort(key=lambda r: (r["iter"] if r["iter"] is not None else 0))
+        prev = None
+        for entry in iters:
+            entry["changed"] = _param_diff(prev, entry["params"])
+            prev = entry["params"]
         comps = [i["composite"] for i in iters if i["composite"] is not None]
         runs.append({
             "job_id": d.name,
             "dataset": dataset or _strip_iter(d.name),
-            "optimizer": opt_map.get(d.name, "llm"),
+            "optimizer": _optimizer_for(d, opt_map),
             "n_iters": len(iters),
             "best_composite": max(comps) if comps else None,
             "iterations": iters,

@@ -54,6 +54,20 @@ function winnerOf(it: IterationRow[]): "llm" | "optuna" | "tie" | null {
   return b.llm === b.optuna ? "tie" : b.llm > b.optuna ? "llm" : "optuna";
 }
 
+/** How to badge/label a run by its optimizer. */
+function optMeta(opt?: string) {
+  const o = (opt || "llm").toLowerCase();
+  return o === "optuna"
+    ? {
+        key: "optuna", name: "Optuna", icon: "🎲",
+        desc: "TPE sampler — parameters drawn from a Bayesian model of previous trials (no natural-language reasoning).",
+      }
+    : {
+        key: "llm", name: "LLM", icon: "💬",
+        desc: "DeepSeek — proposes parameters and explains each change in natural language.",
+      };
+}
+
 function bestIter(e: Experiment): IterationRow | null {
   let best: IterationRow | null = null;
   for (const r of e.iterations) {
@@ -195,12 +209,18 @@ function DatasetReport({ exp, runs }: { exp: Experiment; runs: Run[] }) {
   const w = winnerOf(exp.iterations);
   const repro = best?.reproducibility ?? best?.agreement ?? null;
 
-  // Prefer the richest decision trail (with reasoning) for this dataset.
-  const trailRun = useMemo(() => {
-    const forDs = runs.filter((r) => r.dataset === exp.name);
+  // Every optimizer run recorded for this dataset (LLM / Optuna / no-prior
+  // ablation), best first — the user picks which decision trail to inspect.
+  const dsRuns = useMemo(() => {
+    const forDs = runs.filter((r) => r.dataset === exp.name && r.iterations.length);
     forDs.sort((a, b) => (b.best_composite ?? -1) - (a.best_composite ?? -1));
-    return forDs[0] ?? null;
+    return forDs;
   }, [runs, exp.name]);
+
+  const [runSel, setRunSel] = useState<string | null>(null);
+  // Drop the manual pick when the dataset changes (defaults back to the best run).
+  useEffect(() => { setRunSel(null); }, [exp.name]);
+  const trailRun = dsRuns.find((r) => r.job_id === runSel) ?? dsRuns[0] ?? null;
 
   return (
     <section className="run-report">
@@ -253,8 +273,37 @@ function DatasetReport({ exp, runs }: { exp: Experiment; runs: Run[] }) {
 
       {/* decision trail */}
       <div className="report-block">
-        <h3>Decision trail</h3>
+        <div className="trail-head">
+          <h3>Decision trail</h3>
+          {dsRuns.length > 0 && (
+            <div className="run-picker no-print">
+              {dsRuns.map((r) => {
+                const m = optMeta(r.optimizer);
+                const noPrior = /no[_-]?prior/i.test(r.job_id);
+                return (
+                  <button
+                    key={r.job_id}
+                    className={`run-pill${r.job_id === trailRun?.job_id ? " sel" : ""}`}
+                    onClick={() => setRunSel(r.job_id)}
+                    title={r.job_id}
+                  >
+                    <span className={`badge badge-${m.key} sm`}>{m.icon} {m.name}</span>
+                    {noPrior && <span className="run-pill-tag">no-prior</span>}
+                    <span className="run-pill-comp">{fmt(r.best_composite, 3)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
         {trailRun && trailRun.iterations.length ? (
+          <>
+          <div className="trail-meta">
+            <span className={`badge badge-${optMeta(trailRun.optimizer).key}`}>
+              {optMeta(trailRun.optimizer).icon} {optMeta(trailRun.optimizer).name} run
+            </span>
+            <span className="trail-desc">{optMeta(trailRun.optimizer).desc}</span>
+          </div>
           <div className="timeline">
             {trailRun.iterations.map((it, idx) => (
               <div
@@ -294,6 +343,7 @@ function DatasetReport({ exp, runs }: { exp: Experiment; runs: Run[] }) {
               </div>
             ))}
           </div>
+          </>
         ) : (
           <IterTable items={exp.iterations} bestRun={exp.best_run} />
         )}
