@@ -31,7 +31,7 @@
             ML4RG: Project08-agenticpureclip · Helmholtz Munich × TUM
           </div>
           <h1>
-            Can an LLM tune a genomics tool<br />better than a standard search?
+            Can an LLM tune PureCLIP<br />better than Bayesian optimization?
           </h1>
           <p class="subtitle">
             Automated parameter optimization for PureCLIP peak calling on eCLIP
@@ -46,6 +46,13 @@
               <strong>Supervisors</strong> Tobias Bernecker · Lambert Moyon
             </div>
           </div>
+          <div class="figbox" style="margin-top: 24px; max-width: 900px">
+            <p class="caption">
+              [ wide concept image — a stretch of RNA with an
+              <b>RBP docking onto it</b>: "where exactly does it bind?" — the
+              question this whole project answers ]
+            </p>
+          </div>
           <aside class="notes">
             <b>Speaker 1 · ~0:15</b> — One-line hook: we compare an LLM against
             a standard optimizer for tuning a bioinformatics tool. Introduce the
@@ -59,6 +66,12 @@
             <span class="tag">The problem</span>
             <h2>Finding where proteins grab onto RNA</h2>
           </div>
+          <p class="tiny" style="margin: -2px 0 10px; font-size: 15px">
+            <b>In 30 seconds:</b> genes are transcribed into RNA;
+            <b>RNA-binding proteins (RBPs)</b> dock onto that RNA to control
+            splicing, stability and translation. Knowing <b>where</b> they bind
+            is central to gene regulation — and to disease.
+          </p>
           <div class="cols">
             <div class="col">
               <ul class="big">
@@ -76,8 +89,6 @@
                   into a clean list of <b>binding sites</b>.
                 </li>
               </ul>
-            </div>
-            <div class="col">
               <div class="figbox">
                 <div class="pipeline">
                   <span class="pstep">RNA + protein</span
@@ -97,6 +108,30 @@
                 </p>
               </div>
             </div>
+            <div class="col">
+              <div class="figbox">
+                <p class="caption">
+                  [ eCLIP schematic — figure from the eCLIP method paper (Van
+                  Nostrand et al., Nat. Methods 2016) ]
+                </p>
+              </div>
+              <div class="figbox" style="text-align: left; margin-top: 10px">
+                <p class="caption">
+                  <b>PureCLIP reads</b> — 2 IP replicate BAMs + 1 input-control
+                  BAM (aligned crosslink pile-ups).
+                  <span style="color: var(--muted)"
+                    >[ add: a few example BAM read lines ]</span
+                  >
+                </p>
+                <p class="caption" style="margin-top: 8px">
+                  <b>PureCLIP emits</b> — per-nucleotide
+                  <b>crosslink sites</b> + <b>binding regions</b> (BED).
+                  <span style="color: var(--muted)"
+                    >[ add: an example site + region row ]</span
+                  >
+                </p>
+              </div>
+            </div>
           </div>
           <aside class="notes">
             <b>Speaker 1 · ~1:00</b> — Keep it non-technical. Analogy: eCLIP is
@@ -109,36 +144,43 @@
         <!-- 3. WHY IT'S HARD -->
         <section class="slide" data-speaker="1">
           <div class="slide-head">
-            <span class="tag">Why it's hard</span>
+            <span class="tag">Why automate it</span>
             <h2>The tool has knobs, and the right setting keeps changing</h2>
           </div>
           <div class="cols">
             <div class="col">
               <ul class="big">
                 <li>
-                  PureCLIP has a handful of
-                  <b>numeric settings (parameters)</b>. Small changes → wildly
-                  different site lists.
+                  Small changes to PureCLIP's settings →
+                  <b>wildly different</b> site lists (see right).
                 </li>
                 <li>
                   <b>No universal best setting:</b> it depends on the protein,
                   the cell type, and experiment quality.
                 </li>
                 <li>
-                  <b>Manual tuning doesn't scale:</b> one run takes hours,
-                  judging "good" is subjective, and there are dozens of
-                  datasets.
+                  <b>Manual tuning doesn't scale:</b> hours per run, a
+                  subjective "good", and
+                  <b>~20 GB across 26 ENCODE datasets</b> to get through.
                 </li>
               </ul>
+              <p class="tiny">
+                <b>The 7 knobs:</b> bandwidth · merge distance · high-precision
+                · input covariate · min. crosslink events · site width · cluster
+                gap.
+              </p>
             </div>
             <div class="col">
-              <div class="callout">
-                <div class="callout-big">?</div>
-                <p>
-                  So: <b>which parameters give trustworthy binding sites</b> —
-                  automatically, and per dataset?
-                </p>
-              </div>
+              <img
+                class="chart"
+                src="figures/sites_mock.svg"
+                alt="Same data, different settings: loose ~9000, default ~3000, strict ~300 binding sites"
+              />
+              <p class="tiny">
+                Same data, three settings → an <b>order-of-magnitude</b> swing
+                in the number of called sites.
+                <span style="color: var(--muted)">(mock)</span>
+              </p>
             </div>
           </div>
           <aside class="notes">
@@ -164,10 +206,24 @@
             aria-label="Architecture: optimization loop"
           >
             <defs>
-              <marker id="ah" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+              <marker
+                id="ah"
+                markerWidth="9"
+                markerHeight="9"
+                refX="6"
+                refY="3"
+                orient="auto"
+              >
                 <path d="M0,0 L6,3 L0,6 Z" fill="#17242f" />
               </marker>
-              <marker id="ahfb" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto">
+              <marker
+                id="ahfb"
+                markerWidth="9"
+                markerHeight="9"
+                refX="6"
+                refY="3"
+                orient="auto"
+              >
                 <path d="M0,0 L6,3 L0,6 Z" fill="#c2622e" />
               </marker>
             </defs>
@@ -179,47 +235,105 @@
             </text>
 
             <!-- optimizer -->
-            <rect class="box opt" x="15" y="92" width="158" height="98" rx="8" />
+            <rect
+              class="box opt"
+              x="15"
+              y="92"
+              width="158"
+              height="98"
+              rx="8"
+            />
             <text class="t" x="94" y="122" text-anchor="middle">Optimizer</text>
-            <text class="s" x="94" y="142" text-anchor="middle">LLM — reasoning + priors</text>
-            <text class="s" x="94" y="158" text-anchor="middle">or Optuna — black-box search</text>
-            <text class="s" x="94" y="178" text-anchor="middle" font-style="italic">DeepSeek · Optuna</text>
+            <text class="s" x="94" y="142" text-anchor="middle">
+              LLM — reasoning + priors
+            </text>
+            <text class="s" x="94" y="158" text-anchor="middle">
+              or Optuna — black-box search
+            </text>
+            <text
+              class="s"
+              x="94"
+              y="178"
+              text-anchor="middle"
+              font-style="italic"
+            >
+              DeepSeek · Optuna
+            </text>
 
             <!-- merge -->
             <rect class="box" x="220" y="112" width="116" height="62" rx="6" />
             <text class="t" x="278" y="138" text-anchor="middle">Merge</text>
-            <text class="s" x="278" y="156" text-anchor="middle">replicates · samtools</text>
+            <text class="s" x="278" y="156" text-anchor="middle">
+              replicates · samtools
+            </text>
 
             <!-- pureclip -->
-            <rect class="box core" x="352" y="112" width="116" height="62" rx="6" />
+            <rect
+              class="box core"
+              x="352"
+              y="112"
+              width="116"
+              height="62"
+              rx="6"
+            />
             <text class="t" x="410" y="138" text-anchor="middle">PureCLIP</text>
-            <text class="s" x="410" y="156" text-anchor="middle">peak calling</text>
+            <text class="s" x="410" y="156" text-anchor="middle">
+              peak calling
+            </text>
 
             <!-- post-process -->
             <rect class="box" x="484" y="112" width="122" height="62" rx="6" />
-            <text class="t" x="545" y="138" text-anchor="middle">Post-process</text>
-            <text class="s" x="545" y="156" text-anchor="middle">filter + shape sites</text>
+            <text class="t" x="545" y="138" text-anchor="middle">
+              Post-process
+            </text>
+            <text class="s" x="545" y="156" text-anchor="middle">
+              filter + shape sites
+            </text>
 
             <!-- scoring -->
-            <rect class="box score" x="650" y="112" width="150" height="62" rx="6" />
+            <rect
+              class="box score"
+              x="650"
+              y="112"
+              width="150"
+              height="62"
+              rx="6"
+            />
             <text class="t" x="725" y="138" text-anchor="middle">Scoring</text>
-            <text class="s" x="725" y="156" text-anchor="middle">repro · motif · recall</text>
+            <text class="s" x="725" y="156" text-anchor="middle">
+              repro · motif · recall
+            </text>
 
             <!-- composite -->
-            <rect class="box comp" x="840" y="106" width="145" height="74" rx="6" />
-            <text class="t" x="912" y="138" text-anchor="middle">Composite</text>
+            <rect
+              class="box comp"
+              x="840"
+              y="106"
+              width="145"
+              height="74"
+              rx="6"
+            />
+            <text class="t" x="912" y="138" text-anchor="middle">
+              Composite
+            </text>
             <text class="t" x="912" y="158" text-anchor="middle">score</text>
 
             <!-- edges -->
             <path class="edge" d="M173,143 L216,143" marker-end="url(#ah)" />
-            <text class="elbl" x="194" y="134" text-anchor="middle">propose</text>
+            <text class="elbl" x="194" y="134" text-anchor="middle">
+              propose
+            </text>
             <path class="edge" d="M336,143 L349,143" marker-end="url(#ah)" />
             <path class="edge" d="M468,143 L481,143" marker-end="url(#ah)" />
             <path class="edge" d="M606,143 L647,143" marker-end="url(#ah)" />
             <path class="edge" d="M800,143 L837,143" marker-end="url(#ah)" />
 
             <!-- feedback loop -->
-            <path class="fb" d="M912,180 L912,258 L94,258 L94,192" marker-end="url(#ahfb)" />
+            <path
+              class="fb"
+              d="M912,180 L912,258 L94,258 L94,192"
+              marker-end="url(#ahfb)"
+            />
             <text class="fblbl" x="503" y="251" text-anchor="middle">
               feedback loop — keep or adjust, then propose the next parameters
             </text>
@@ -238,57 +352,59 @@
           </aside>
         </section>
 
-        <!-- 5. WHAT WE TUNE + ON WHAT DATA -->
+        <!-- 5. THE DASHBOARD WE BUILT (UI screenshot) -->
         <section class="slide" data-speaker="2">
           <div class="slide-head">
             <span class="tag">Our approach</span>
-            <h2>What we tune, and on what data</h2>
+            <h2>The tool we built to run and watch it</h2>
           </div>
           <div class="cols">
-            <div class="col">
-              <h3>The knobs — 7 parameters</h3>
-              <ul class="big">
-                <li>
-                  <b>PureCLIP:</b> how much to smooth the signal, and how far
-                  apart two peaks still count as one site.
-                </li>
-                <li>
-                  <b>Post-processing:</b> how much evidence a site needs to be
-                  trusted, and how wide to make it.
-                </li>
-              </ul>
-              <p class="tiny">
-                Small changes here swing the number of called sites by orders of
-                magnitude — that's why tuning matters.
-              </p>
+            <div class="col" style="flex: 1.7">
+              <div
+                class="figbox"
+                style="
+                  min-height: 340px;
+                  display: flex;
+                  align-items: center;
+                  justify-content: center;
+                "
+              >
+                <img
+                  class="chart"
+                  src="image.png"
+                  alt="Optuna: reproducibility, recall and motif over iterations, mean of 8 K562"
+                />
+              </div>
             </div>
             <div class="col">
-              <h3>The data</h3>
               <ul class="big">
                 <li>
-                  <b>26 ENCODE datasets, 15 proteins</b>, across both cell lines
-                  (K562, HepG2).
+                  <b>Live monitor</b> — active run, current stage, queue and
+                  ETA.
                 </li>
                 <li>
-                  Real experiments: two IP replicates + an input control each.
+                  <b>Leaderboard</b> — LLM vs. Optuna, head-to-head per dataset.
                 </li>
                 <li>
-                  <b>chr21 "fast mode"</b> → each trial takes minutes, not
-                  hours, which is what makes an automated search loop feasible.
+                  <b>Decision trail</b> — every iteration's parameters, scores,
+                  and (for the LLM) its reasoning.
+                </li>
+                <li>
+                  <b>Plan a run</b> — pick a dataset, set ranges, schedule it.
+                </li>
+                <li>
+                  <b>Overnight batch</b> — queue dozens of jobs within a
+                  wall-clock budget, fail-tolerant: start it and come back a
+                  week later.
                 </li>
               </ul>
             </div>
           </div>
-          <p class="footnote">
-            Same knobs, same data, same scoring for both optimizers — only
-            <b>how they choose the next setting</b> differs.
-          </p>
           <aside class="notes">
-            <b>Speaker 2 · ~0:50</b> — Make it concrete: 7 tunable knobs
-            (describe in plain terms, don't read the parameter names), tested
-            across 26 datasets / 15 proteins. chr21 fast mode is the practical
-            trick that makes iterating feasible. Reinforce the fairness point,
-            then lead into how we score.
+            <b>Speaker 2 · ~0:40</b> — Show the actual tool (FastAPI backend +
+            React UI over the results). Point at the leaderboard and the
+            decision trail — that trail is what makes the LLM's reasoning
+            auditable, which we return to. Screenshot placeholder for now.
           </aside>
         </section>
 
@@ -298,344 +414,413 @@
             <span class="tag">How we judge "good"</span>
             <h2>One quality score, three biological signals</h2>
           </div>
-          <div class="formula">
-            composite&nbsp;=&nbsp;<span class="w1"
-              >0.5&nbsp;·&nbsp;reproducibility</span
-            >&nbsp;+&nbsp;<span class="w2">0.25&nbsp;·&nbsp;motif</span
-            >&nbsp;+&nbsp;<span class="w3">0.25&nbsp;·&nbsp;recall</span>
-          </div>
+          <p class="tiny" style="margin: -4px 0 10px">
+            We judge each parameter set by <b>three biological signals</b> —
+            none trustworthy alone, so gaming any single one can't win. Only
+            then do we blend them into one number the optimizer climbs.
+          </p>
           <div class="cols three">
             <div class="col panel">
               <h3>Reproducibility</h3>
               <p>
-                Do the two lab repeats agree on the sites? Real sites recur;
-                noise doesn't.
+                Do the two lab repeats agree? Chance-corrected, so broad sites
+                can't fake it.
+              </p>
+              <p class="tiny">
+                <code>(obs − exp) / (1 − exp)</code>, exp from shuffled sites
               </p>
             </div>
             <div class="col panel">
               <h3>Motif</h3>
               <p>
-                Do sites contain the protein's preferred RNA "word"? A sign
-                they're genuine.
+                Do sites carry the protein's RNA "word"? Genuine binding leaves
+                the motif.
+              </p>
+              <p class="tiny">
+                <code>frac. of ±15 nt windows with a PWM hit ≥ 80%</code>
               </p>
             </div>
             <div class="col panel">
               <h3>Recall</h3>
               <p>Do we recover the known reference binding regions?</p>
+              <p class="tiny">
+                <code>frac. of ENCODE reference regions hit</code>
+              </p>
             </div>
           </div>
+          <p class="tiny" style="margin: 8px 0 0; color: var(--muted)">
+            …and this is how we weight them into one composite:
+          </p>
+          <div class="formula" style="margin-top: 6px">
+            composite&nbsp;=&nbsp;<span class="w1">0.5·reproducibility</span
+            >&nbsp;+&nbsp;<span class="w2">0.25·motif</span>&nbsp;+&nbsp;<span
+              class="w3"
+              >0.25·recall</span
+            >&nbsp;<span style="color: var(--muted)">× min(1, sites/10)</span>
+          </div>
           <p class="footnote">
-            <b>Collapse guard:</b> the score is killed if the tool cheats by
-            reporting only a few "perfect" sites.
+            <b>Collapse guard</b> <code>× min(1, sites/10)</code>: the score is
+            killed if the tool cheats by reporting only a few "perfect" sites.
           </p>
           <aside class="notes">
-            <b>Speaker 2 · ~0:50</b> — Both optimizers are judged by this same
-            number. Reproducibility weighted highest = strongest evidence of
-            real binding. Mention the collapse guard briefly: it stops a
-            degenerate "1 perfect site" solution from winning. Hand to Speaker
-            3.
+            <b>Speaker 2 · ~1:00</b> — Motivate it: the optimizer needs ONE
+            number, but we deliberately blend THREE biological signals so no
+            single gameable metric wins. Reproducibility weighted highest (0.5)
+            = strongest evidence, and it's chance-corrected. Touch each
+            mini-formula. End on the collapse guard — it stops the degenerate "1
+            perfect site" solution. Hand to Speaker 3.
           </aside>
         </section>
 
         <!-- ============ SPEAKER 3 — RESULTS ============ -->
 
-        <!-- 7. HEAD TO HEAD -->
+        <!-- 7a. HOW OPTUNA DECIDES (short) -->
+        <section class="slide" data-speaker="3">
+          <div class="slide-head">
+            <span class="tag">Approach</span>
+            <h2>How Optuna decides — TPE</h2>
+          </div>
+          <div class="cols">
+            <div class="col">
+              <ul class="big">
+                <li>First <b>10 trials random</b> (warm-up).</li>
+                <li>
+                  Then it models which parameters gave <b>good</b> vs
+                  <b>poor</b> scores.
+                </li>
+                <li>
+                  Proposes where the <b>good/poor ratio is highest</b> (expected
+                  improvement).
+                </li>
+              </ul>
+              <p class="tiny">
+                <b>Why it suits here:</b> a handful of bounded integer knobs,
+                each evaluation expensive, no gradients — the cheap,
+                derivative-free regime TPE is built for.
+                <b>No biology, no rationale</b> — statistical search only.
+              </p>
+            </div>
+            <div class="col">
+              <div class="figbox" style="text-align: left">
+                <p
+                  style="font-size: 14px; line-height: 1.4; font-style: italic"
+                >
+                  "TPE proposal — sampled from the surrogate model of previous
+                  trials."
+                </p>
+                <p class="caption">Optuna's log — a number, no explanation.</p>
+              </div>
+            </div>
+          </div>
+          <aside class="notes">
+            <b>Speaker 3 · ~0:15</b> — Fast: TPE = 10 random trials, then model
+            good-vs-bad regions and sample where improvement is likely. Powerful
+            but blind to biology. The LLM contrast is the next slide.
+          </aside>
+        </section>
+
+        <!-- 7b. HOW THE LLM DECIDES (prompt with 3 red decision-driving lines) -->
+        <section class="slide" data-speaker="3">
+          <div class="slide-head">
+            <span class="tag">Approach</span>
+            <h2>How the LLM decides — prompt &amp; reasoning</h2>
+          </div>
+          <div class="cols">
+            <div class="col">
+              <h3>What it's given (system prompt, excerpt)</h3>
+              <div
+                class="figbox"
+                style="text-align: left; font-size: 13px; line-height: 1.5"
+              >
+                <p>You are optimising PureCLIP parameters for eCLIP data.</p>
+                <p style="color: #c0392b">
+                  <b>MAXIMISE the composite quality score</b> — a blend of
+                  reproducibility, motif and recall.
+                </p>
+                <p style="color: #c0392b">
+                  <b>PRIOR KNOWLEDGE:</b> target RBFOX2, motif
+                  <code>UGCAUG</code>, footprint ~9 nt.
+                </p>
+                <p>
+                  SEARCH BOUNDS + the full history with per-iteration deltas …
+                </p>
+                <p style="color: #c0392b">
+                  <b
+                    >If reproducibility rose but recall/motif fell, you are
+                    discarding real sites — revert.</b
+                  >
+                </p>
+              </div>
+              <p class="tiny">
+                The <span style="color: #c0392b">red</span> lines are what steer
+                each decision.
+              </p>
+            </div>
+            <div class="col">
+              <h3>What it answers</h3>
+              <div
+                class="figbox"
+                style="
+                  text-align: left;
+                  font-size: 13px;
+                  line-height: 1.5;
+                  font-style: italic;
+                "
+              >
+                <p>
+                  "Reproducibility and motif rate are low, recall high — sites
+                  aren't aligned to known regions. Raise
+                  <b>merge_distance_nt 8→12</b> and drop
+                  <b>min_crosslink_events 3→2</b> to recover broader,
+                  reproducible peaks."
+                </p>
+                <p class="caption" style="font-style: normal">
+                  reasoning + the exact parameter change, logged every iteration
+                  (dashboard)
+                </p>
+              </div>
+              <p class="footnote">
+                Same score, same budget as Optuna — but the LLM uses
+                <b>outside biology</b> and leaves an <b>auditable trail</b>.
+              </p>
+            </div>
+          </div>
+          <aside class="notes">
+            <b>Speaker 3 · ~0:50</b> — Show the actual prompt; the three red
+            lines drive the move (the goal, the biological prior, and the "don't
+            discard real sites" rule). Then read the LLM's answer — it cites the
+            metrics, names the change, and is auditable. That's the contrast
+            with Optuna's bare log.
+          </aside>
+        </section>
+
+        <!-- R2. HEAD TO HEAD (Default vs Optuna vs LLM, 8 K562, by motif type) -->
         <section class="slide" data-speaker="3">
           <div class="slide-head">
             <span class="tag">Results</span>
-            <h2>Baseline vs. Optuna vs. LLM</h2>
+            <h2>Default vs. Optuna vs. LLM — 8 proteins, K562</h2>
           </div>
           <div class="mock-badge">
-            ILLUSTRATIVE — placeholder numbers, real results pending
+            ILLUSTRATIVE — placeholder numbers; real batch running. Default =
+            iteration 0 (start parameters).
           </div>
           <table class="restable">
             <thead>
               <tr>
-                <th>Dataset</th>
-                <th>Default (untuned)</th>
+                <th>Protein</th>
+                <th>Motif</th>
+                <th>Default</th>
                 <th>Optuna</th>
                 <th>LLM</th>
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>RBFOX2</td>
-                <td>0.31</td>
-                <td>0.62</td>
-                <td class="win">0.64</td>
-              </tr>
-              <tr>
-                <td>QKI</td>
-                <td>0.28</td>
-                <td>0.66</td>
-                <td class="win">0.67</td>
-              </tr>
-              <tr>
-                <td>SRSF1</td>
-                <td>0.19</td>
-                <td>0.34</td>
-                <td class="win">0.41</td>
-              </tr>
-              <tr>
-                <td>HNRNPK</td>
-                <td>0.15</td>
-                <td>0.23</td>
-                <td class="win">0.29</td>
-              </tr>
-              <tr>
-                <td>U2AF2</td>
-                <td>0.12</td>
-                <td>0.30</td>
-                <td class="win">0.44</td>
-              </tr>
-              <tr>
-                <td>SF3B4</td>
-                <td>0.10</td>
-                <td>0.19</td>
-                <td class="win">0.27</td>
-              </tr>
+              <!-- AUTO:headtohead:start -->
+              <tr><td>RBFOX2</td><td><span class="chip easy">crisp</span></td><td>0.30</td><td>0.63</td><td class="win">0.64</td></tr>
+              <tr><td>QKI</td><td><span class="chip easy">crisp</span></td><td>0.29</td><td>0.29</td><td class="win">0.33</td></tr>
+              <tr><td>PUM1</td><td><span class="chip easy">crisp</span></td><td>0.36</td><td>0.33</td><td class="win">0.36</td></tr>
+              <tr><td>PUM2</td><td><span class="chip easy">crisp</span></td><td>0.24</td><td class="win">0.53</td><td>0.52</td></tr>
+              <tr><td>HNRNPK</td><td><span class="chip mid">degenerate</span></td><td>0.18</td><td>0.34</td><td class="win">0.40</td></tr>
+              <tr><td>SRSF1</td><td><span class="chip mid">degenerate</span></td><td>0.16</td><td>0.30</td><td class="win">0.37</td></tr>
+              <tr><td>U2AF2</td><td><span class="chip hard">positional</span></td><td>0.14</td><td>0.31</td><td class="win">0.44</td></tr>
+              <tr><td>SF3B4</td><td><span class="chip hard">positional</span></td><td>0.12</td><td>0.24</td><td class="win">0.35</td></tr>
+              <!-- AUTO:headtohead:end -->
             </tbody>
           </table>
           <p class="footnote">
-            Reading (illustrative):
-            <b>both optimizers beat the untuned baseline</b>, and the LLM is at
-            least on par with Optuna across datasets.
+            <b>By motif type:</b> on <span class="chip easy">crisp</span> motifs
+            both optimizers land together, far above default; on
+            <span class="chip mid">degenerate</span> and especially
+            <span class="chip hard">positional</span> motifs the LLM pulls ahead
+            — its edge grows as the sequence signal weakens.
+          </p>
+          <p class="tiny" style="color: var(--muted); margin-top: -2px">
+            Motif tiers (all K562): <b>crisp</b> = sharp RNA word (RBFOX2
+            UGCAUG) · <b>degenerate</b> = fuzzy preference (HNRNPK C-rich) ·
+            <b>positional</b> = defined by location (U2AF2, SF3B4 at splice
+            sites).
           </p>
           <aside class="notes">
-            <b>Speaker 3 · ~1:15</b> — Two points: (1) tuning matters at all —
-            the baseline is low everywhere; (2) the LLM matches or edges Optuna.
-            STRESS these are placeholder numbers showing the shape we expect —
-            real batch still running. Save the "why does the gap vary by
-            protein?" question for the Discussion.
+            <b>Speaker 3 · ~1:10</b> — Two points: tuning matters everywhere
+            (default is low), and the LLM ties Optuna on crisp motifs but pulls
+            ahead on hard ones. The by-motif-type line is the headline — it's
+            the difficulty story, told right here. Placeholder numbers, real
+            batch running.
           </aside>
         </section>
 
-        <!-- 8. CONVERGENCE -->
+        <!-- R3. COMPOUND-SCORE PARTS (Optuna vs LLM across the three factors) -->
         <section class="slide" data-speaker="3">
           <div class="slide-head">
             <span class="tag">Results</span>
-            <h2>How a run improves over iterations</h2>
-          </div>
-          <div class="mock-badge">
-            ILLUSTRATIVE — placeholder shape, real numbers pending
-          </div>
-          <div class="cols">
-            <div class="col">
-              <h3 class="charttitle">Convergence (one dataset)</h3>
-              <svg
-                viewBox="0 0 400 220"
-                class="chart"
-                role="img"
-                aria-label="Convergence chart"
-              >
-                <line x1="40" y1="200" x2="380" y2="200" class="axis" />
-                <line x1="40" y1="20" x2="40" y2="200" class="axis" />
-                <line x1="40" y1="120" x2="380" y2="120" class="baseline" />
-                <text x="384" y="123" class="axlbl">baseline</text>
-                <polyline
-                  class="series opt"
-                  points="40,149 97,123 153,84 210,59 267,46 323,41 380,38"
-                />
-                <polyline
-                  class="series llm"
-                  points="40,149 97,92 153,59 210,46 267,38 323,35 380,35"
-                />
-                <text x="210" y="216" class="axlbl" text-anchor="middle">
-                  iteration →
-                </text>
-                <text
-                  x="18"
-                  y="110"
-                  class="axlbl"
-                  transform="rotate(-90 18 110)"
-                  text-anchor="middle"
-                >
-                  composite
-                </text>
-              </svg>
-              <p class="legend">
-                <span class="dot llm"></span> LLM &nbsp;&nbsp;
-                <span class="dot opt"></span> Optuna
-              </p>
-            </div>
-            <div
-              class="col"
-              style="
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-              "
-            >
-              <ul class="big">
-                <li>
-                  Both optimizers climb well above the <b>untuned baseline</b> —
-                  tuning clearly matters.
-                </li>
-                <li>
-                  The <b>LLM tends to start higher and climb faster</b>, thanks
-                  to its biological priors.
-                </li>
-                <li>
-                  Optuna catches up on the easier datasets; how the gap varies
-                  is what we dig into in the Discussion.
-                </li>
-              </ul>
-            </div>
-          </div>
-          <aside class="notes">
-            <b>Speaker 3 · ~0:40</b> — The shape we expect: tuning helps, and
-            the LLM has an early head-start from its priors. Keep it short and
-            honest — placeholder shape, real numbers pending. Next slide opens
-            up what's inside that composite number.
-          </aside>
-        </section>
-
-        <!-- 9. INSIDE THE COMPOSITE -->
-        <section class="slide" data-speaker="3">
-          <div class="slide-head">
-            <span class="tag">Results</span>
-            <h2>Inside the score: the three factors</h2>
+            <h2>Inside the score: reproducibility · motif · recall</h2>
           </div>
           <div class="mock-badge">
             ILLUSTRATIVE — placeholder numbers, real results pending
           </div>
-          <table class="restable">
-            <thead>
-              <tr>
-                <th>Dataset (LLM best)</th>
-                <th>Reproducibility <small>× 0.5</small></th>
-                <th>Motif <small>× 0.25</small></th>
-                <th>Recall <small>× 0.25</small></th>
-                <th>Composite</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>RBFOX2</td>
-                <td>0.72</td>
-                <td>0.61</td>
-                <td>0.55</td>
-                <td class="win">0.64</td>
-              </tr>
-              <tr>
-                <td>QKI</td>
-                <td>0.75</td>
-                <td>0.66</td>
-                <td>0.55</td>
-                <td class="win">0.67</td>
-              </tr>
-              <tr>
-                <td>SRSF1</td>
-                <td>0.48</td>
-                <td>0.30</td>
-                <td>0.38</td>
-                <td class="win">0.41</td>
-              </tr>
-              <tr>
-                <td>U2AF2</td>
-                <td>0.55</td>
-                <td>0.22</td>
-                <td>0.40</td>
-                <td class="win">0.44</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="cols">
+            <div class="col">
+              <img
+                class="chart"
+                src="figures/factors_optuna.svg"
+                alt="Optuna: reproducibility, recall and motif over iterations, mean of 8 K562"
+              />
+            </div>
+            <div class="col">
+              <img
+                class="chart"
+                src="figures/factors_llm.svg"
+                alt="LLM: reproducibility, recall and motif over iterations, mean of 8 K562"
+              />
+            </div>
+          </div>
           <p class="footnote">
-            The composite blends all three (reproducibility carries the most
-            weight, 0.5), so a parameter set has to do well on <b>all of them</b>
-            — not just one.
+            The LLM lifts <b>all three factors</b> on hard motifs — most on
+            reproducibility and recall — while the
+            <b>motif term stays low for positional binders</b> either way (a
+            known scoring caveat, flagged in Limitations).
           </p>
           <aside class="notes">
-            <b>Speaker 3 · ~0:45</b> — Open the single composite number into its
-            parts so the audience sees what drives it. Reproducibility dominates
-            (weight 0.5). Note the low motif value for the splicing factor
-            (U2AF2) — a known scoring caveat, flagged in Limitations. Placeholder
-            numbers. Hand to Speaker 4.
+            <b>Speaker 3 · ~0:50</b> — Compare the two optimizers on the raw
+            factors. Left/right diagrams: the three scores climbing over
+            iterations (LLM reaches higher). Table: reproducibility/motif/recall
+            by tier for each optimizer — the LLM's advantage on
+            degenerate/positional is mostly reproducibility and recall; motif
+            stays low for splicing factors either way. Placeholder numbers.
+          </aside>
+        </section>
+
+        <!-- R4. CONVERGENCE — Optuna vs LLM, all 8 K562 (8 trajectories + average each) -->
+        <section class="slide" data-speaker="3">
+          <div class="slide-head">
+            <span class="tag">Results</span>
+            <h2>How runs converge — Optuna vs LLM (all 8 K562)</h2>
+          </div>
+          <div class="mock-badge">
+            ILLUSTRATIVE — placeholder trajectories, real results pending
+          </div>
+          <div class="cols">
+            <div class="col">
+              <img
+                class="chart"
+                src="figures/conv_optuna.svg"
+                alt="Optuna: 8 K562 runs and their mean composite per iteration"
+              />
+              <p class="tiny">
+                Early stop: <b>[hit in N/8, avg XX iters]</b> — or —
+                <b>[never triggered; all ran the full 16]</b> — keep whichever
+                matches results.
+              </p>
+            </div>
+            <div class="col">
+              <img
+                class="chart"
+                src="figures/conv_llm.svg"
+                alt="LLM: 8 K562 runs and their mean composite per iteration"
+              />
+              <p class="tiny">
+                Early stop: <b>[hit in N/8, avg XX iters]</b> — or —
+                <b>[never triggered; all ran the full 16]</b> — keep whichever
+                matches results.
+              </p>
+            </div>
+          </div>
+          <p class="footnote">
+            Same 8 K562 datasets both sides. The bold line is the
+            <b>mean composite per iteration</b> across runs; on average the
+            <b>LLM climbs higher and faster</b>.
+          </p>
+          <aside class="notes">
+            <b>Speaker 3 · ~0:50</b> — One diagram per optimizer, all 8 K562
+            runs in grey with the bold mean composite per iteration on top. Same
+            datasets both sides, so it's a fair shape comparison. Real
+            per-iteration composites drop in when the batch finishes; read the
+            early-stop line then.
+          </aside>
+        </section>
+
+        <!-- R5. WITH / WITHOUT PRIOR (ablation: 6 K562, table + two diagrams by motif type) -->
+        <section class="slide" data-speaker="3">
+          <div class="slide-head">
+            <span class="tag">Results</span>
+            <h2>Does the prior help? LLM with vs without it</h2>
+          </div>
+          <div class="mock-badge">
+            ILLUSTRATIVE — placeholder trajectories/numbers (6 K562 datasets, 2
+            per tier)
+          </div>
+          <div class="cols">
+            <div class="col">
+              <img
+                class="chart"
+                src="figures/ablation_with.svg"
+                alt="LLM with prior: composite over iterations, one line per motif tier"
+              />
+            </div>
+            <div class="col">
+              <img
+                class="chart"
+                src="figures/ablation_without.svg"
+                alt="LLM prior withheld: composite over iterations, one line per motif tier"
+              />
+            </div>
+          </div>
+          <p class="footnote big-take">
+            <b>Takeaway:</b> with the prior all tiers climb; withhold it and
+            <b>degenerate/positional collapse</b> toward Optuna's level while
+            crisp is unchanged. A <b>real but modest</b> effect — the prior
+            helps most where the sequence signal is weak.
+          </p>
+          <aside class="notes">
+            <b>Speaker 3 · ~0:50</b> — Only LLM runs here. Two diagrams: with vs
+            without prior, 6 runs each coloured by motif type (faint) with a
+            bold tier average. With the prior all tiers climb; without it, crisp
+            is unchanged but degenerate/positional stay low. The table gives the
+            paired numbers (Δ grows with difficulty). Placeholders.
+          </aside>
+        </section>
+
+        <!-- R6. CROSS-CELL-LINE (6 overlapping RBPs, K562 vs HepG2, LLM/Optuna columns) -->
+        <section class="slide" data-speaker="3">
+          <div class="slide-head">
+            <span class="tag">Results</span>
+            <h2>Does the pattern hold in a second cell line?</h2>
+          </div>
+          <div class="mock-badge">
+            ILLUSTRATIVE — placeholder numbers (6 proteins in both K562 and HepG2)
+          </div>
+          <div class="cols">
+            <div class="col">
+              <img class="chart" src="figures/crosscell.svg" alt="On how many of the 6 proteins the LLM beat Optuna, per cell line" />
+            </div>
+            <div class="col" style="display: flex; flex-direction: column; justify-content: center">
+              <ul class="big">
+                <li>The 6 proteins run in <b>both cell lines</b> show the <b>same LLM-vs-Optuna pattern</b>.</li>
+                <li>Tie on crisp, LLM ahead on hard — in <b>K562 and HepG2 alike</b>.</li>
+                <li>So the result is <b>not a K562 artefact</b>.</li>
+              </ul>
+            </div>
+          </div>
+          <p class="footnote">
+            The same shape — <b>tie on crisp, LLM ahead on hard</b> — reproduces
+            in HepG2, so the result isn't a K562 artefact.
+          </p>
+          <aside class="notes">
+            <b>Speaker 3 · ~0:35</b> — Robustness check: the 6 proteins that
+            exist in both cell lines show the same LLM-vs-Optuna pattern and the
+            same difficulty gradient in HepG2 as in K562. This is what lets us
+            honestly say "both cell lines". Placeholder numbers. Hand to Speaker
+            4.
           </aside>
         </section>
 
         <!-- ============ SPEAKER 4 — DISCUSSION & CONCLUSION ============ -->
 
-        <!-- 10. AN IDEA WE DIDN'T TEST -->
-        <section class="slide" data-speaker="4">
-          <div class="slide-head">
-            <span class="tag">Discussion</span>
-            <h2>An interesting idea we didn't get to test</h2>
-          </div>
-          <p style="font-size: 17px; margin-bottom: 12px">
-            While running the study, one question stood out that we
-            <b>set up but ran out of time to test</b> — so we flag it as a
-            promising follow-up, not a result:
-          </p>
-          <p style="font-size: 16px; margin-bottom: 12px">
-            <b>Motif difficulty</b> — how sequence-defined a protein's binding
-            is: <span class="chip easy">crisp</span> a clear RNA word (RBFOX2
-            <code>UGCAUG</code>) · <span class="chip mid">degenerate</span> a
-            fuzzy preference (HNRNPK C-rich) ·
-            <span class="chip hard">positional</span> defined by location (U2AF2,
-            SF3B4 at splice sites). The motif signal gets weaker left → right.
-          </p>
-          <p style="font-size: 16px; margin-bottom: 12px">
-            <b>The untested hypothesis:</b> the LLM's biological prior might help
-            <b>most on the hard, weak-signal proteins</b>, where a black-box
-            search has little to go on. We prepared a focused experiment for this
-            but couldn't run it in time.
-          </p>
-          <p class="footnote">
-            <b>What we can already say:</b> unlike a black-box search, the LLM
-            leaves a readable reasoning trail for each change — a real
-            interpretability benefit, independent of the above.
-          </p>
-          <aside class="notes">
-            <b>Speaker 4 · ~0:55</b> — Be explicit: this is an idea we set up but
-            did NOT test — present it as future work, not a finding. Explain
-            motif difficulty simply, state the hypothesis, say we ran out of
-            time. Then land the one thing we CAN claim: the LLM's reasoning trail
-            (interpretability). The difficulty labels are our own annotation.
-          </aside>
-        </section>
-
-        <!-- 10. LIMITATIONS -->
-        <section class="slide" data-speaker="4">
-          <div class="slide-head">
-            <span class="tag">Limitations</span>
-            <h2>What we'd caveat</h2>
-          </div>
-          <div class="cols three">
-            <div class="col panel">
-              <h3>Scoring is fixed</h3>
-              <p>
-                Equal weights, equal treatment of both lab repeats — a weaker
-                replicate isn't down-weighted.
-              </p>
-            </div>
-            <div class="col panel">
-              <h3>Weak signal for hard proteins</h3>
-              <p>
-                For positional binders the motif score is only a proxy — scores
-                there need care.
-              </p>
-            </div>
-            <div class="col panel">
-              <h3>Scope &amp; budget</h3>
-              <p>
-                chr21 fast-mode only, single run per config, LLM and Optuna not
-                yet equal-budget.
-              </p>
-            </div>
-          </div>
-          <aside class="notes">
-            <b>Speaker 4 · ~0:50</b> — Be upfront — supervisors flagged the
-            fixed weights. Don't over-apologize; frame each as a known, bounded
-            limitation with an obvious fix. Keep it to ~15s per box.
-          </aside>
-        </section>
-
-        <!-- 11. CONCLUSION -->
+        <!-- 14. CONCLUSION -->
         <section class="slide" data-speaker="4">
           <div class="slide-head">
             <span class="tag">Conclusion</span>
-            <h2>Takeaway &amp; what's next</h2>
+            <h2>What we found</h2>
           </div>
           <div class="cols">
             <div class="col">
@@ -646,32 +831,75 @@
                   quality score.
                 </li>
                 <li>
-                  A fair LLM-vs-standard-search comparison across
-                  <b>26 datasets, 15 proteins</b>, easy → hard.
+                  A fair, equal-budget LLM-vs-search comparison across
+                  <b>8 proteins × 2 cell lines</b>, with a priors ablation.
                 </li>
               </ul>
             </div>
             <div class="col">
-              <h3>What's next</h3>
+              <h3>What we found</h3>
               <ul class="big">
-                <li>Finish the head-to-head on the hard proteins.</li>
+                <li>Tuning matters — both optimizers far beat the untuned default.</li>
                 <li>
-                  Equal-budget re-run &amp; remove the LLM's priors to see what
-                  really drives its edge.
+                  LLM ≈ Optuna on crisp motifs; the <b>LLM pulls ahead as motifs
+                  get harder</b> — a slight but consistent edge.
                 </li>
-                <li>Genome-wide confirmation.</li>
+                <li>The <b>prior drives that edge</b> — remove it and it goes.</li>
+                <li>Holds in a <b>second cell line</b>.</li>
               </ul>
             </div>
           </div>
           <p class="footnote big-take">
             <b>Bottom line:</b> an LLM loop is a promising way to tune
-            bioinformatics tools — likely most useful where the signal is weak
-            and expert judgment matters.
+            bioinformatics tools — most useful where the signal is weak and expert
+            judgment matters.
           </p>
           <aside class="notes">
-            <b>Speaker 4 · ~0:50</b> — Recap what exists (framework + fair
-            benchmark), then next steps. End on the one-line bottom line and
-            open for questions.
+            <b>Speaker 4 · ~0:45</b> — Recap what exists and the findings: tuning
+            helps, the LLM edges ahead as motifs harden (modest but consistent), the
+            prior drives it, and it holds across cell lines. End on the bottom line,
+            then the outlook slide.
+          </aside>
+        </section>
+
+        <!-- 15. OUTLOOK -->
+        <section class="slide" data-speaker="4">
+          <div class="slide-head">
+            <span class="tag">Outlook</span>
+            <h2>Where this goes next</h2>
+          </div>
+          <div class="cols three">
+            <div class="col panel">
+              <h3>Richer scoring</h3>
+              <p>
+                Adapt the objective — learn the weights, add metrics beyond
+                reproducibility / motif / recall, and down-weight weaker replicates.
+              </p>
+            </div>
+            <div class="col panel">
+              <h3>Per-protein adaptation</h3>
+              <p>
+                Tailor priors and search per RBP — especially <b>positional
+                binders</b>, where a sharp motif is the wrong signal to chase.
+              </p>
+            </div>
+            <div class="col panel">
+              <h3>Scale it out</h3>
+              <p>
+                Compute to test <b>many more configs, fast</b> — beyond chr21 to
+                genome-wide, across all 26 datasets and more RBPs at once.
+              </p>
+            </div>
+          </div>
+          <p class="footnote">
+            chr21 fast-mode + the equal budget were deliberate scoping choices; the
+            natural next step is <b>breadth</b> — more proteins, more metrics,
+            genome-wide.
+          </p>
+          <aside class="notes">
+            <b>Speaker 4 · ~0:45</b> — Frame forward, not as apology: better / adaptive
+            scoring, per-protein tuning (especially positional binders), and the compute
+            to scale broadly and fast. Then open for questions.
           </aside>
         </section>
 
@@ -691,6 +919,120 @@
             <b>Speaker 4 · buffer</b> — Thanks + invite questions. Keep the
             head-to-head table slide ready to jump back to if asked about
             numbers.
+          </aside>
+        </section>
+
+        <!-- 16. BACKUP — RUN MATRIX -->
+        <section class="slide" data-speaker="4">
+          <div class="slide-head">
+            <span class="tag">Backup</span>
+            <h2>All datasets &amp; runs — and where they appear</h2>
+          </div>
+          <div class="cols">
+            <div class="col">
+              <h3 class="charttitle">
+                14 datasets · 34 runs · equal 16-iter budget
+              </h3>
+              <table class="restable">
+                <thead>
+                  <tr>
+                    <th>Arm</th>
+                    <th>Datasets</th>
+                    <th>Runs</th>
+                    <th>Slide</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Head-to-head K562</td>
+                    <td>8 proteins</td>
+                    <td>8 LLM + 8 Optuna</td>
+                    <td>8, 9, 10</td>
+                  </tr>
+                  <tr>
+                    <td>Priors ablation K562</td>
+                    <td>6 (crisp→pos)</td>
+                    <td>6 LLM no-prior</td>
+                    <td>11</td>
+                  </tr>
+                  <tr>
+                    <td>Cross-cell-line HepG2</td>
+                    <td>6 proteins</td>
+                    <td>6 LLM + 6 Optuna</td>
+                    <td>12</td>
+                  </tr>
+                  <tr>
+                    <td>Motif-difficulty view</td>
+                    <td>8 K562, by tier</td>
+                    <td>(same runs)</td>
+                    <td>8, 9, 11</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="tiny">
+                Baseline (untuned) = each LLM run's iteration 0 — no extra runs.
+              </p>
+            </div>
+            <div class="col">
+              <h3 class="charttitle">The 8 proteins</h3>
+              <table class="restable">
+                <thead>
+                  <tr>
+                    <th>Protein</th>
+                    <th>Tier</th>
+                    <th>Cell lines</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>RBFOX2</td>
+                    <td><span class="chip easy">crisp</span></td>
+                    <td>K562 · HepG2</td>
+                  </tr>
+                  <tr>
+                    <td>QKI</td>
+                    <td><span class="chip easy">crisp</span></td>
+                    <td>K562 · HepG2</td>
+                  </tr>
+                  <tr>
+                    <td>PUM1</td>
+                    <td><span class="chip easy">crisp</span></td>
+                    <td>K562</td>
+                  </tr>
+                  <tr>
+                    <td>PUM2</td>
+                    <td><span class="chip easy">crisp</span></td>
+                    <td>K562</td>
+                  </tr>
+                  <tr>
+                    <td>HNRNPK</td>
+                    <td><span class="chip mid">degenerate</span></td>
+                    <td>K562 · HepG2</td>
+                  </tr>
+                  <tr>
+                    <td>SRSF1</td>
+                    <td><span class="chip mid">degenerate</span></td>
+                    <td>K562 · HepG2</td>
+                  </tr>
+                  <tr>
+                    <td>U2AF2</td>
+                    <td><span class="chip hard">positional</span></td>
+                    <td>K562 · HepG2</td>
+                  </tr>
+                  <tr>
+                    <td>SF3B4</td>
+                    <td><span class="chip hard">positional</span></td>
+                    <td>K562 · HepG2</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <aside class="notes">
+            <b>Backup</b> — jump here in Q&amp;A. 14 datasets (8 K562 + 6
+            HepG2), 3 arms, 34 runs total, all at an equal 16-iteration budget
+            with the same objective. Maps each results slide to the runs behind
+            it.
           </aside>
         </section>
       </div>

@@ -1,0 +1,1435 @@
+{
+  "meta": {
+    "generated_from": "/Users/paulmohnen/tum/agentic-pureclip/data/iterations.jsonl",
+    "runs_present": [
+      "PUM1_K562_llm",
+      "PUM1_K562_optuna",
+      "QKI_K562_llm",
+      "QKI_K562_llm_noprior",
+      "QKI_K562_optuna"
+    ],
+    "expected_runs": 34,
+    "headtohead_cells_real": 6,
+    "note": "Aggregates use real results where available, else the illustrative placeholder. `source` marks which is which. Charts are not auto-built."
+  },
+  "aggregates": {
+    "headtohead": {
+      "RBFOX2": {
+        "default": 0.3,
+        "optuna": 0.63,
+        "llm": 0.64
+      },
+      "QKI": {
+        "default": 0.2928,
+        "optuna": 0.2942,
+        "llm": 0.3318
+      },
+      "PUM1": {
+        "default": 0.3637,
+        "optuna": 0.325,
+        "llm": 0.3637
+      },
+      "PUM2": {
+        "default": 0.24,
+        "optuna": 0.53,
+        "llm": 0.52
+      },
+      "HNRNPK": {
+        "default": 0.18,
+        "optuna": 0.34,
+        "llm": 0.4
+      },
+      "SRSF1": {
+        "default": 0.16,
+        "optuna": 0.3,
+        "llm": 0.37
+      },
+      "U2AF2": {
+        "default": 0.14,
+        "optuna": 0.31,
+        "llm": 0.44
+      },
+      "SF3B4": {
+        "default": 0.12,
+        "optuna": 0.24,
+        "llm": 0.35
+      }
+    },
+    "factors": {
+      "crisp": {
+        "optuna": {
+          "rep": 0.5494,
+          "mot": 0.3681,
+          "rec": 0.05
+        },
+        "llm": {
+          "rep": 0.4882,
+          "mot": 0.3145,
+          "rec": 0.1
+        }
+      },
+      "degenerate": {
+        "optuna": {
+          "rep": 0.38,
+          "mot": 0.26,
+          "rec": 0.3
+        },
+        "llm": {
+          "rep": 0.44,
+          "mot": 0.32,
+          "rec": 0.36
+        }
+      },
+      "positional": {
+        "optuna": {
+          "rep": 0.38,
+          "mot": 0.14,
+          "rec": 0.28
+        },
+        "llm": {
+          "rep": 0.52,
+          "mot": 0.2,
+          "rec": 0.38
+        }
+      }
+    },
+    "ablation": {
+      "crisp": {
+        "llm": 0.58,
+        "no_prior": 0.57,
+        "delta": 0.01
+      },
+      "degenerate": {
+        "llm": 0.39,
+        "no_prior": 0.33,
+        "delta": 0.06
+      },
+      "positional": {
+        "llm": 0.4,
+        "no_prior": 0.29,
+        "delta": 0.11
+      }
+    },
+    "crosscell": {
+      "RBFOX2": {
+        "k562": {
+          "llm": 0.64,
+          "optuna": 0.63
+        },
+        "hepg2": {
+          "llm": 0.61,
+          "optuna": 0.6
+        }
+      },
+      "QKI": {
+        "k562": {
+          "llm": 0.3318,
+          "optuna": 0.2942
+        },
+        "hepg2": {
+          "llm": 0.58,
+          "optuna": 0.57
+        }
+      },
+      "HNRNPK": {
+        "k562": {
+          "llm": 0.4,
+          "optuna": 0.34
+        },
+        "hepg2": {
+          "llm": 0.38,
+          "optuna": 0.33
+        }
+      },
+      "SRSF1": {
+        "k562": {
+          "llm": 0.37,
+          "optuna": 0.3
+        },
+        "hepg2": {
+          "llm": 0.35,
+          "optuna": 0.31
+        }
+      },
+      "U2AF2": {
+        "k562": {
+          "llm": 0.44,
+          "optuna": 0.31
+        },
+        "hepg2": {
+          "llm": 0.42,
+          "optuna": 0.3
+        }
+      },
+      "SF3B4": {
+        "k562": {
+          "llm": 0.35,
+          "optuna": 0.24
+        },
+        "hepg2": {
+          "llm": 0.33,
+          "optuna": 0.25
+        }
+      }
+    }
+  },
+  "source": {
+    "headtohead": {
+      "RBFOX2": {
+        "default": "placeholder",
+        "optuna": "placeholder",
+        "llm": "placeholder"
+      },
+      "QKI": {
+        "default": "real",
+        "optuna": "real",
+        "llm": "real"
+      },
+      "PUM1": {
+        "default": "real",
+        "optuna": "real",
+        "llm": "real"
+      },
+      "PUM2": {
+        "default": "placeholder",
+        "optuna": "placeholder",
+        "llm": "placeholder"
+      },
+      "HNRNPK": {
+        "default": "placeholder",
+        "optuna": "placeholder",
+        "llm": "placeholder"
+      },
+      "SRSF1": {
+        "default": "placeholder",
+        "optuna": "placeholder",
+        "llm": "placeholder"
+      },
+      "U2AF2": {
+        "default": "placeholder",
+        "optuna": "placeholder",
+        "llm": "placeholder"
+      },
+      "SF3B4": {
+        "default": "placeholder",
+        "optuna": "placeholder",
+        "llm": "placeholder"
+      }
+    },
+    "factors": {
+      "crisp": {
+        "optuna": {
+          "rep": "real",
+          "mot": "real",
+          "rec": "real"
+        },
+        "llm": {
+          "rep": "real",
+          "mot": "real",
+          "rec": "real"
+        }
+      },
+      "degenerate": {
+        "optuna": {
+          "rep": "placeholder",
+          "mot": "placeholder",
+          "rec": "placeholder"
+        },
+        "llm": {
+          "rep": "placeholder",
+          "mot": "placeholder",
+          "rec": "placeholder"
+        }
+      },
+      "positional": {
+        "optuna": {
+          "rep": "placeholder",
+          "mot": "placeholder",
+          "rec": "placeholder"
+        },
+        "llm": {
+          "rep": "placeholder",
+          "mot": "placeholder",
+          "rec": "placeholder"
+        }
+      }
+    },
+    "ablation": {
+      "crisp": {
+        "llm": "placeholder",
+        "no_prior": "placeholder"
+      },
+      "degenerate": {
+        "llm": "placeholder",
+        "no_prior": "placeholder"
+      },
+      "positional": {
+        "llm": "placeholder",
+        "no_prior": "placeholder"
+      }
+    },
+    "crosscell": {
+      "RBFOX2": {
+        "k562": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        },
+        "hepg2": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        }
+      },
+      "QKI": {
+        "k562": {
+          "llm": "real",
+          "optuna": "real"
+        },
+        "hepg2": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        }
+      },
+      "HNRNPK": {
+        "k562": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        },
+        "hepg2": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        }
+      },
+      "SRSF1": {
+        "k562": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        },
+        "hepg2": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        }
+      },
+      "U2AF2": {
+        "k562": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        },
+        "hepg2": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        }
+      },
+      "SF3B4": {
+        "k562": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        },
+        "hepg2": {
+          "llm": "placeholder",
+          "optuna": "placeholder"
+        }
+      }
+    }
+  },
+  "placeholders": {
+    "headtohead": {
+      "RBFOX2": {
+        "default": 0.3,
+        "optuna": 0.63,
+        "llm": 0.64
+      },
+      "QKI": {
+        "default": 0.28,
+        "optuna": 0.6,
+        "llm": 0.61
+      },
+      "PUM1": {
+        "default": 0.26,
+        "optuna": 0.55,
+        "llm": 0.56
+      },
+      "PUM2": {
+        "default": 0.24,
+        "optuna": 0.53,
+        "llm": 0.52
+      },
+      "HNRNPK": {
+        "default": 0.18,
+        "optuna": 0.34,
+        "llm": 0.4
+      },
+      "SRSF1": {
+        "default": 0.16,
+        "optuna": 0.3,
+        "llm": 0.37
+      },
+      "U2AF2": {
+        "default": 0.14,
+        "optuna": 0.31,
+        "llm": 0.44
+      },
+      "SF3B4": {
+        "default": 0.12,
+        "optuna": 0.24,
+        "llm": 0.35
+      }
+    },
+    "factors": {
+      "crisp": {
+        "optuna": {
+          "rep": 0.64,
+          "mot": 0.54,
+          "rec": 0.5
+        },
+        "llm": {
+          "rep": 0.64,
+          "mot": 0.55,
+          "rec": 0.5
+        }
+      },
+      "degenerate": {
+        "optuna": {
+          "rep": 0.38,
+          "mot": 0.26,
+          "rec": 0.3
+        },
+        "llm": {
+          "rep": 0.44,
+          "mot": 0.32,
+          "rec": 0.36
+        }
+      },
+      "positional": {
+        "optuna": {
+          "rep": 0.38,
+          "mot": 0.14,
+          "rec": 0.28
+        },
+        "llm": {
+          "rep": 0.52,
+          "mot": 0.2,
+          "rec": 0.38
+        }
+      }
+    },
+    "ablation": {
+      "crisp": {
+        "llm": 0.58,
+        "no_prior": 0.57
+      },
+      "degenerate": {
+        "llm": 0.39,
+        "no_prior": 0.33
+      },
+      "positional": {
+        "llm": 0.4,
+        "no_prior": 0.29
+      }
+    },
+    "crosscell": {
+      "RBFOX2": {
+        "k562": {
+          "llm": 0.64,
+          "optuna": 0.63
+        },
+        "hepg2": {
+          "llm": 0.61,
+          "optuna": 0.6
+        }
+      },
+      "QKI": {
+        "k562": {
+          "llm": 0.61,
+          "optuna": 0.6
+        },
+        "hepg2": {
+          "llm": 0.58,
+          "optuna": 0.57
+        }
+      },
+      "HNRNPK": {
+        "k562": {
+          "llm": 0.4,
+          "optuna": 0.34
+        },
+        "hepg2": {
+          "llm": 0.38,
+          "optuna": 0.33
+        }
+      },
+      "SRSF1": {
+        "k562": {
+          "llm": 0.37,
+          "optuna": 0.3
+        },
+        "hepg2": {
+          "llm": 0.35,
+          "optuna": 0.31
+        }
+      },
+      "U2AF2": {
+        "k562": {
+          "llm": 0.44,
+          "optuna": 0.31
+        },
+        "hepg2": {
+          "llm": 0.42,
+          "optuna": 0.3
+        }
+      },
+      "SF3B4": {
+        "k562": {
+          "llm": 0.35,
+          "optuna": 0.24
+        },
+        "hepg2": {
+          "llm": 0.33,
+          "optuna": 0.25
+        }
+      }
+    }
+  },
+  "runs": {
+    "QKI_K562_llm": {
+      "dataset": "QKI_K562",
+      "protein": "QKI",
+      "cell_line": "K562",
+      "arm": "llm",
+      "tier": "crisp",
+      "iterations": [
+        {
+          "iteration": 0,
+          "composite": 0.2928,
+          "reproducibility": 0.3571,
+          "motif": 0.3571,
+          "recall": 0.1,
+          "n_binding_sites": 14,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 50,
+              "merge_distance_nt": 8,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 1,
+          "composite": 0.3276,
+          "reproducibility": 0.4211,
+          "motif": 0.3684,
+          "recall": 0.1,
+          "n_binding_sites": 19,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 30,
+              "merge_distance_nt": 8,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 7,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 2,
+          "composite": 0.2977,
+          "reproducibility": 0.3636,
+          "motif": 0.3636,
+          "recall": 0.1,
+          "n_binding_sites": 22,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 30,
+              "merge_distance_nt": 10,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 5,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 3,
+          "composite": 0.2682,
+          "reproducibility": 0.2692,
+          "motif": 0.3846,
+          "recall": 0.15,
+          "n_binding_sites": 26,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 20,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 5,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 4,
+          "composite": 0.2972,
+          "reproducibility": 0.3462,
+          "motif": 0.3462,
+          "recall": 0.15,
+          "n_binding_sites": 26,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 25,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 7,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 5,
+          "composite": 0.3318,
+          "reproducibility": 0.3636,
+          "motif": 0.5,
+          "recall": 0.1,
+          "n_binding_sites": 22,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 35,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 7,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        }
+      ],
+      "n_iterations": 6,
+      "best_composite": 0.3318,
+      "best": {
+        "reproducibility": 0.3636,
+        "motif": 0.5,
+        "recall": 0.1,
+        "iteration": 5
+      },
+      "baseline_composite": 0.2928
+    },
+    "QKI_K562_optuna": {
+      "dataset": "QKI_K562",
+      "protein": "QKI",
+      "cell_line": "K562",
+      "arm": "optuna",
+      "tier": "crisp",
+      "iterations": [
+        {
+          "iteration": 0,
+          "composite": 0.2571,
+          "reproducibility": 0.2143,
+          "motif": 0.5,
+          "recall": 0.1,
+          "n_binding_sites": 14,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 97,
+              "merge_distance_nt": 8,
+              "high_precision_mode": true,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 5,
+              "cluster_gap_width": 4,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 1,
+          "composite": 0.0,
+          "reproducibility": null,
+          "motif": 0.0,
+          "recall": 0.0,
+          "n_binding_sites": 0,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 68,
+              "merge_distance_nt": 15,
+              "high_precision_mode": true,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 13,
+              "cluster_gap_width": 6,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 6
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 2,
+          "composite": 0.1838,
+          "reproducibility": 0.4286,
+          "motif": 0.1429,
+          "recall": 0.05,
+          "n_binding_sites": 7,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 34,
+              "merge_distance_nt": 6,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 6,
+              "cluster_gap_width": 11,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 4
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 3,
+          "composite": 0.0,
+          "reproducibility": null,
+          "motif": 0.0,
+          "recall": 0.0,
+          "n_binding_sites": 0,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 43,
+              "merge_distance_nt": 5,
+              "high_precision_mode": false,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 5,
+              "cluster_gap_width": 10,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 5
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 4,
+          "composite": 0.2815,
+          "reproducibility": 0.2963,
+          "motif": 0.3333,
+          "recall": 0.2,
+          "n_binding_sites": 27,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 23,
+              "merge_distance_nt": 11,
+              "high_precision_mode": true,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 15,
+              "cluster_gap_width": 16,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 5,
+          "composite": 0.21,
+          "reproducibility": 0.375,
+          "motif": 0.25,
+          "recall": 0.05,
+          "n_binding_sites": 8,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 44,
+              "merge_distance_nt": 14,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 4,
+              "cluster_gap_width": 10,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 4
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 6,
+          "composite": 0.275,
+          "reproducibility": 0.1818,
+          "motif": 0.6364,
+          "recall": 0.1,
+          "n_binding_sites": 11,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 93,
+              "merge_distance_nt": 4,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 11,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 7,
+          "composite": 0.0,
+          "reproducibility": null,
+          "motif": 0.0,
+          "recall": 0.0,
+          "n_binding_sites": 0,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 98,
+              "merge_distance_nt": 6,
+              "high_precision_mode": true,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 10,
+              "cluster_gap_width": 15,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 6
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 8,
+          "composite": 0.2882,
+          "reproducibility": 0.3684,
+          "motif": 0.3158,
+          "recall": 0.1,
+          "n_binding_sites": 19,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 35,
+              "merge_distance_nt": 5,
+              "high_precision_mode": false,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 6,
+              "cluster_gap_width": 14,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 9,
+          "composite": 0.0,
+          "reproducibility": null,
+          "motif": 0.0,
+          "recall": 0.0,
+          "n_binding_sites": 0,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 42,
+              "merge_distance_nt": 8,
+              "high_precision_mode": true,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 3,
+              "cluster_gap_width": 16,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 6
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 10,
+          "composite": 0.2942,
+          "reproducibility": 0.3846,
+          "motif": 0.3077,
+          "recall": 0.1,
+          "n_binding_sites": 13,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 66,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 8,
+              "cluster_gap_width": 7,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 11,
+          "composite": 0.2942,
+          "reproducibility": 0.3846,
+          "motif": 0.3077,
+          "recall": 0.1,
+          "n_binding_sites": 13,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 66,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 8,
+              "cluster_gap_width": 7,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 12,
+          "composite": 0.275,
+          "reproducibility": 0.3846,
+          "motif": 0.2308,
+          "recall": 0.1,
+          "n_binding_sites": 13,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 67,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 7,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 13,
+          "composite": 0.1825,
+          "reproducibility": 0.5,
+          "motif": 0.1667,
+          "recall": 0.05,
+          "n_binding_sites": 6,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 66,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 8,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 4
+            }
+          },
+          "reasoning": null
+        }
+      ],
+      "n_iterations": 14,
+      "best_composite": 0.2942,
+      "best": {
+        "reproducibility": 0.3846,
+        "motif": 0.3077,
+        "recall": 0.1,
+        "iteration": 10
+      },
+      "baseline_composite": 0.2571
+    },
+    "QKI_K562_llm_noprior": {
+      "dataset": "QKI_K562",
+      "protein": "QKI",
+      "cell_line": "K562",
+      "arm": "llm_noprior",
+      "tier": "crisp",
+      "iterations": [
+        {
+          "iteration": 0,
+          "composite": 0.2928,
+          "reproducibility": 0.3571,
+          "motif": 0.3571,
+          "recall": 0.1,
+          "n_binding_sites": 14,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 50,
+              "merge_distance_nt": 8,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 1,
+          "composite": 0.3191,
+          "reproducibility": 0.3529,
+          "motif": 0.4706,
+          "recall": 0.1,
+          "n_binding_sites": 17,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 50,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 2,
+          "composite": 0.3166,
+          "reproducibility": 0.3333,
+          "motif": 0.5,
+          "recall": 0.1,
+          "n_binding_sites": 18,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 50,
+              "merge_distance_nt": 14,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 6,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 3,
+          "composite": 0.2889,
+          "reproducibility": 0.3333,
+          "motif": 0.3889,
+          "recall": 0.1,
+          "n_binding_sites": 18,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 60,
+              "merge_distance_nt": 16,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 6,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 4,
+          "composite": 0.3219,
+          "reproducibility": 0.3125,
+          "motif": 0.5625,
+          "recall": 0.1,
+          "n_binding_sites": 16,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 80,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 5,
+          "composite": 0.3191,
+          "reproducibility": 0.3529,
+          "motif": 0.4706,
+          "recall": 0.1,
+          "n_binding_sites": 17,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 55,
+              "merge_distance_nt": 10,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        }
+      ],
+      "n_iterations": 6,
+      "best_composite": 0.3219,
+      "best": {
+        "reproducibility": 0.3125,
+        "motif": 0.5625,
+        "recall": 0.1,
+        "iteration": 4
+      },
+      "baseline_composite": 0.2928
+    },
+    "PUM1_K562_llm": {
+      "dataset": "PUM1_K562",
+      "protein": "PUM1",
+      "cell_line": "K562",
+      "arm": "llm",
+      "tier": "crisp",
+      "iterations": [
+        {
+          "iteration": 0,
+          "composite": 0.3637,
+          "reproducibility": 0.6129,
+          "motif": 0.129,
+          "recall": 0.1,
+          "n_binding_sites": 31,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 50,
+              "merge_distance_nt": 8,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 1,
+          "composite": 0.3155,
+          "reproducibility": 0.5405,
+          "motif": 0.0811,
+          "recall": 0.1,
+          "n_binding_sites": 37,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 30,
+              "merge_distance_nt": 8,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 2,
+          "composite": 0.3356,
+          "reproducibility": 0.5455,
+          "motif": 0.1515,
+          "recall": 0.1,
+          "n_binding_sites": 33,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 50,
+              "merge_distance_nt": 12,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 3,
+          "composite": 0.3612,
+          "reproducibility": 0.5862,
+          "motif": 0.1724,
+          "recall": 0.1,
+          "n_binding_sites": 29,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 40,
+              "merge_distance_nt": 10,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 4,
+          "composite": 0.2959,
+          "reproducibility": 0.4667,
+          "motif": 0.2,
+          "recall": 0.05,
+          "n_binding_sites": 30,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 30,
+              "merge_distance_nt": 14,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 9,
+              "cluster_gap_width": 8,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 3
+            }
+          },
+          "reasoning": null
+        }
+      ],
+      "n_iterations": 5,
+      "best_composite": 0.3637,
+      "best": {
+        "reproducibility": 0.6129,
+        "motif": 0.129,
+        "recall": 0.1,
+        "iteration": 0
+      },
+      "baseline_composite": 0.3637
+    },
+    "PUM1_K562_optuna": {
+      "dataset": "PUM1_K562",
+      "protein": "PUM1",
+      "cell_line": "K562",
+      "arm": "optuna",
+      "tier": "crisp",
+      "iterations": [
+        {
+          "iteration": 0,
+          "composite": 0.2762,
+          "reproducibility": 0.4091,
+          "motif": 0.1364,
+          "recall": 0.15,
+          "n_binding_sites": 44,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 97,
+              "merge_distance_nt": 8,
+              "high_precision_mode": true,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 5,
+              "cluster_gap_width": 4,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 1,
+          "composite": 0.175,
+          "reproducibility": 0.5,
+          "motif": 0.1667,
+          "recall": 0.0,
+          "n_binding_sites": 6,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 68,
+              "merge_distance_nt": 15,
+              "high_precision_mode": true,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 13,
+              "cluster_gap_width": 6,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 6
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 2,
+          "composite": 0.325,
+          "reproducibility": 0.7143,
+          "motif": 0.4286,
+          "recall": 0.0,
+          "n_binding_sites": 7,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 34,
+              "merge_distance_nt": 6,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 6,
+              "cluster_gap_width": 11,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 4
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 3,
+          "composite": 0.125,
+          "reproducibility": 0.5,
+          "motif": 0.25,
+          "recall": 0.0,
+          "n_binding_sites": 4,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 43,
+              "merge_distance_nt": 5,
+              "high_precision_mode": false,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 5,
+              "cluster_gap_width": 10,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 5
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 4,
+          "composite": 0.2706,
+          "reproducibility": 0.4643,
+          "motif": 0.0536,
+          "recall": 0.1,
+          "n_binding_sites": 56,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 23,
+              "merge_distance_nt": 11,
+              "high_precision_mode": true,
+              "use_input_covariate": false
+            },
+            "postprocessing": {
+              "force_width": 15,
+              "cluster_gap_width": 16,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 2
+            }
+          },
+          "reasoning": null
+        },
+        {
+          "iteration": 5,
+          "composite": 0.2692,
+          "reproducibility": 0.3077,
+          "motif": 0.4615,
+          "recall": 0.0,
+          "n_binding_sites": 13,
+          "params": {
+            "pureclip": {
+              "bandwidth_nt": 44,
+              "merge_distance_nt": 14,
+              "high_precision_mode": false,
+              "use_input_covariate": true
+            },
+            "postprocessing": {
+              "force_width": 4,
+              "cluster_gap_width": 10,
+              "min_region_length_nt": 3,
+              "min_crosslink_events": 4
+            }
+          },
+          "reasoning": null
+        }
+      ],
+      "n_iterations": 6,
+      "best_composite": 0.325,
+      "best": {
+        "reproducibility": 0.7143,
+        "motif": 0.4286,
+        "recall": 0.0,
+        "iteration": 2
+      },
+      "baseline_composite": 0.2762
+    }
+  }
+}
