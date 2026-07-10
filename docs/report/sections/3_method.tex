@@ -1,79 +1,95 @@
-\section{Architecture \& Implementation}
+\section{Methods}
 \label{method}
 
+\subsection{Datasets and workflow}
 
-\begin{itemize}
-  \item \textbf{Datasets \& registry.} 5 original + an ENCORE RBFOX2 dataset + 20 new (2026-07 ENCODE/Drive batches), \textbf{26 datasets across 15 RBPs} (12 newly added), in a table-driven registry (\texttt{pipeline/datasets.py}, \texttt{\_standard\_spec}); motifs auto-resolve per RBP/cell-line from a PWM catalog. All GRCh38, deduplicated; chr21 ``fast mode'' throughout ($\sim$minutes/trial vs.\ hours genome-wide).
-  \item \textbf{Shared evaluation.} One \texttt{evaluate\_config()} entry point (Snakemake: merge IP $\rightarrow$ \texttt{pureclip} $\rightarrow$ per-replicate $\rightarrow$ post-process $\rightarrow$ score $\rightarrow$ \texttt{score\_report.json}), called identically by both optimizers so the comparison isolates \emph{proposal strategy}, not pipeline differences.
-  \item \textbf{Tunable parameters (7).} PureCLIP: \texttt{bandwidth\_nt}[20--100],\\
-  \texttt{merge\_distance\_nt}[4--16], \texttt{high\_precision\_mode}, \texttt{use\_input\_covariate}; post-processing: \texttt{min\_crosslink\_events}[2--6], \texttt{force\_width}[3--15],\\
-  \texttt{cluster\_gap\_width}[4--16].
-  \item \textbf{Composite objective (shared evaluation, not strategy).} $(0.5\cdot\text{repro} + 0.25\cdot\text{motif} + 0.25\cdot\text{recall}) \times \min(1, n_{\text{sites}}/10)$. The collapse guard was added after Optuna collapsed QKI to 1 ``perfect'' site for a fake composite of 0.78. \emph{Both} optimizers are scored by this identical objective, that is what makes the comparison apples-to-apples, but they use it differently: Optuna optimises the composite \emph{scalar} directly via TPE, whereas the LLM additionally sees the three \emph{decomposed} terms plus biological priors and per-iteration deltas and proposes one reasoned change. So the formula is the shared yardstick, and only the proposal strategy differs.
-  \item \textbf{Motif-aware scoring.} Log-odds PWM hit-rate vs.\ shuffled background, reported for the most-enriched motif.
-  \item \textbf{LLM optimizer.} DeepSeek \parencite{deepseek2024} (\texttt{deepseek-chat}, low temperature); each iteration receives biological priors (protein, motif, $\sim$9-nt footprint), bounds, current params, and a per-iteration score-delta table; proposes one change with reasoning; JSON validated against bounds with up to 3 retries.
-  \item \textbf{Optuna optimizer.} TPESampler (seed 42), same \texttt{evaluate\_config}, larger trial budget for fairness.
-  \item \textbf{Reproducible infrastructure (engineering contribution).} Manifest-driven batch runners (\texttt{batch\_runner.py}, \texttt{overnight\_batch.py}) and a live dashboard (Python JSON API + React SPA) that imports the \emph{same} \texttt{composite\_objective} so the UI never disagrees with the optimizer; per-dataset explorer, binding-site ``docking'' view, PDF export.
-  \item \textbf{Reproducibility \& compute.} All runs are driven by versioned Snakemake configs; every trial appends to a per-run \texttt{decisions.jsonl} (params, scores, reasoning), so the whole search is auditable. Code + configs are released, and the full per-dataset ENCODE accession list is given in the Appendix.
-  \item \textbf{Known method limitation.} No positional-motif prior is implemented: for the position-defined binders (U2AF1/2, SF3B1/4, RBM22) the auto-resolved target motif is only a weak proxy, so their motif term should be read with care (discussed in \S\ref{discussion}).
-  % Numbers to fill (not printed): total evaluations + wall-clock under chr21
-  %   fast mode, once the comparison batch finishes.
-  % Figure to add (not printed): pipeline flowchart; cite tool versions
-  %   (PureCLIP 2.0.4 fork, Snakemake, samtools).
-\end{itemize}
+The repository contains a table-driven registry of 26 ENCODE eCLIP datasets
+covering 15 RBPs in K562 and HepG2 cells. Each entry specifies two deduplicated
+IP BAM files, an SMInput BAM file, a GRCh38 reference, benchmark regions, and
+RBP-specific motif information. The experiments analyzed in this report use
+PUM2, HNRNPK, U2AF2, QKI, and PUM1 in K562 cells. PureCLIP was restricted to
+chromosome~21 to make iterative evaluation tractable. Reference regions were
+restricted to the same chromosome before recall was calculated.
 
-% Goal: describe what was built and why each design decision was made.
-% This is an architecture/methods section, not a biology section.
+Both optimizers call the same \texttt{evaluate\_config()} entry point
+(Figure~\ref{fig:pipeline}). The Snakemake workflow merges the IP replicates,
+runs PureCLIP on the merged BAM and separately on each replicate, converts raw
+calls into standardized footprints, and calculates the evaluation metrics. Each
+trial writes its parameters and scores to a self-contained
+\texttt{score\_report.json} file.
 
-% ── 1. Datasets ────────────────────────────────────────────────────────
-%   TABLE, 5 datasets:
-%   Dataset       | RBP    | Cell  | ENCODE accessions (IP rep1, IP rep2, SMInput)
-%   RBFOX2_K562   | RBFOX2 | K562  | ENCFF537RYR, ENCFF296GDR, ENCFF212IIR
-%   RBFOX2_HepG2  | RBFOX2 | HepG2 | ENCFF239CML, ENCFF170YQV, ENCFF515BTB
-%   QKI_K562      | QKI    | K562  | ENCFF698BKX, ENCFF012WMS, ENCFF070RME
-%   QKI_HepG2     | QKI    | HepG2 | ENCFF567ADV, ENCFF862YVK, ENCFF015GLL
-%   PUM1_K562     | PUM1   | K562  | ENCFF064COB, ENCFF583QFB, ENCFF222HEX
-%   All BAMs: GRCh38, deduplicated (ENCODE pipeline). chr21 fast mode
-%   used throughout (~minutes/trial vs. hours genome-wide).
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{images/pipeline_overview.png}
+\caption{Shared optimization workflow. The LLM and TPE differ only in how they
+propose parameters. All candidates are evaluated by the same PureCLIP,
+post-processing, and scoring implementation.}
+\label{fig:pipeline}
+\end{figure}
 
-% ── 2. Evaluation pipeline ─────────────────────────────────────────────
-%   Single shared evaluate_config() entry point called by both optimizers:
-%   (1) Merge IP replicates (samtools).
-%   (2) Run pureclip2 on merged BAM → binding_regions.bed.
-%   (3) Run pureclip2 per-replicate → per-replicate regions.
-%   (4) Post-process: filter by min_crosslink_events, force footprint
-%       width → binding_sites.bed.
-%   (5) Score → score_report.json.
-%   Figure: pipeline flowchart.
+\subsection{Search space}
 
-% ── 3. Tunable parameters ──────────────────────────────────────────────
-%   TABLE, 7 parameters with bounds and what they control:
-%   PureCLIP:        bandwidth_nt [20–100], merge_distance_nt [4–16],
-%                    high_precision_mode {0,1}, use_input_covariate {0,1}
-%   Post-processing: min_crosslink_events [2–6], force_width [3–15],
-%                    cluster_gap_width [4–16]
-%   Justify why each is tunable vs. fixed (brief sentence per group).
+Seven integer or binary variables were optimized (Table~\ref{tab:params}). The
+bounds were fixed for every arm. Four variables control PureCLIP and three
+control the conversion of raw crosslink calls into binding-site footprints.
 
-% ── 4. Composite objective function ───────────────────────────────────
-%   composite = (0.5·repro + 0.25·motif + 0.25·recall)
-%               × min(1, n_sites / 10)
-%   Justify weights: reproducibility = strongest evidence of genuine
-%   binding; motif + recall = biological validity + known-site recovery.
-%   Collapse guard: prevents degenerate solutions (1–2 "perfect" sites);
-%   motivated by an observed Optuna failure (QKI collapsed to 1 site,
-%   composite 0.78) before the guard was introduced.
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+Stage & Parameter & Range & Function \\
+\midrule
+PureCLIP & \texttt{bandwidth\_nt}          & 20--100 & signal smoothing \\
+         & \texttt{merge\_distance\_nt}    & 4--16   & merge nearby events \\
+         & \texttt{high\_precision\_mode} & \{0,1\} & change calling stringency \\
+         & \texttt{use\_input\_covariate} & \{0,1\} & include SMInput signal \\
+Post-processing & \texttt{min\_crosslink\_events} & 2--6 & filter weak sites \\
+                & \texttt{force\_width}          & 3--15 & standardize site width \\
+                & \texttt{cluster\_gap\_width}   & 4--16 & cluster adjacent calls \\
+\bottomrule
+\end{tabular}
+\caption{Parameter space used by both optimization strategies.}
+\label{tab:params}
+\end{table}
 
-% ── 5. LLM optimizer ──────────────────────────────────────────────────
-%   Model: DeepSeek (deepseek-chat, T=0.2). Each iteration receives:
-%   biological priors (protein, motif, footprint ~9 nt), search bounds,
-%   current parameters, and a progress table with per-iteration score
-%   deltas. Proposes one parameter change with reasoning.
-%   Validation: JSON parsed, checked against bounds + prior trials;
-%   up to 3 retries with rejection reason in prompt.
-%   Stopping: max_iterations (10–12) or 10 steps without improvement.
+\subsection{Composite objective}
 
-% ── 6. Optuna optimizer ───────────────────────────────────────────────
-%   TPESampler (seed 42), maximising composite_objective.
-%   Budget: 12–15 trials. No domain knowledge; purely data-driven.
-%   Same evaluate_config() call, same decisions.jsonl output format.
-%   KEY DESIGN DECISION: identical evaluation for both optimizers ensures
-%   the comparison isolates proposal strategy, not pipeline differences.
+For a call set with $n$ sites, the objective was
+\begin{equation}
+S = \left(0.50R_\mathrm{rep}+0.25R_\mathrm{motif}+0.25R_\mathrm{ref}\right)
+\min\!\left(1,\frac{n}{10}\right),
+\label{eq:composite}
+\end{equation}
+where $R_\mathrm{rep}$ is chance-corrected replicate agreement,
+$R_\mathrm{motif}$ is the selected PWM hit rate, and $R_\mathrm{ref}$ is recall
+of chromosome-21 reference regions. All terms are bounded by zero and one. The
+final factor penalizes call sets with fewer than ten sites. This guard was
+introduced after preliminary searches produced small call sets with high
+agreement and motif fractions but negligible genomic coverage. When a component
+is unavailable, the implementation renormalizes the weights over the remaining
+components; all records used in the reported comparison contained all three.
+
+\subsection{Experimental conditions}
+
+The principal experiment contains three arms for PUM2, HNRNPK, and U2AF2. The
+\emph{LLM-with-prior} arm used DeepSeek \texttt{deepseek-chat} at low temperature
+\parencite{deepseek2024} and received the RBP identity, known motifs, an expected
+footprint, the parameter
+bounds, the current configuration, and the decomposed score trajectory. The
+\emph{LLM-without-prior} arm received the same bounds, metrics, and trajectory,
+but not the RBP identity or biological context. Thus, the ablation isolates the
+information supplied in the biological prior; it does not remove numerical
+feedback. Proposed JSON changes were validated against the search bounds and
+retried after invalid responses. The \emph{TPE} arm used Optuna with seed 42 and
+observed the scalar composite score.
+
+All arms had a nominal cap of 16 evaluations and a stagnation threshold of 0.01
+for four successive evaluations. For the LLM, counting began immediately. For
+TPE, it began after the ten startup trials used by the sampler. Consequently,
+the rule did not produce equal evaluation counts: completed LLM runs used five
+to nine evaluations, whereas completed TPE runs used 14 to 16. The U2AF2 TPE run
+was terminated by the batch time limit after two evaluations. QKI and PUM1 were
+earlier pilot experiments under the same objective; the PUM1 TPE run also ended
+at the batch time limit. All analyses are descriptive because each arm was run
+once and no estimate of between-run variability is available.

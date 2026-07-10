@@ -1,89 +1,58 @@
-\section{Theory}
+\section{Background}
 \label{theory}
 
-% ─────────────────────────────────────────────────────────────────────────
-% PLAIN-LANGUAGE GLOSSARY for the technical terms in this section (comment
-% only, not printed). Talking points for the supervisor meeting.
-%   Crosslink: UV light "glues" the protein to the exact RNA spot it touches,
-%       so sequencing can later read out that spot.
-%   SMInput / input control: a background sample without the protein pulldown;
-%       used to subtract non-specific signal (noise).
-%   HMM (hidden Markov model): a statistical model that walks along the genome
-%       and labels each position "bound" or "background"; PureCLIP uses one.
-%   Bandwidth: how much PureCLIP smooths the signal. Merge distance: how close
-%       two signals must be to count as one site. Both are tunable parameters.
-%   PWM (position weight matrix): a table giving, per position, how much each
-%       letter (A/C/G/U) is preferred. Used to score how well a site matches
-%       the protein's motif. Log-odds = motif score vs. random-sequence score.
-%   Shuffled background: randomly reordered sequence used as a "no real motif"
-%       baseline, so we can tell true enrichment from chance.
-%   Optuna / TPE (Tree-structured Parzen Estimator): a standard automated
-%       search that tries parameter sets, learns from the scores, and proposes
-%       the next set. No biology knowledge, purely data-driven. Our "baseline"
-%       optimizer that the LLM is compared against.
-% ─────────────────────────────────────────────────────────────────────────
+\subsection{eCLIP and PureCLIP}
 
+In eCLIP, ultraviolet irradiation covalently links an RBP to the RNA nucleotide
+with which it interacts. The target protein is immunoprecipitated, the associated
+RNA is fragmented, and the fragments are reverse-transcribed and sequenced.
+Reverse transcription frequently terminates at the crosslink, allowing read
+starts to localize contacts at approximately nucleotide resolution. Each dataset
+used here comprises two immunoprecipitation replicates and a size-matched input
+(SMInput) control for non-specific signal~\parencite{vannostrand2016}.
 
-\begin{itemize}
-  \item eCLIP mechanism \parencite{vannostrand2016}: UV crosslink $\rightarrow$ immunoprecipitation $\rightarrow$ RT truncates at the crosslink $\rightarrow$ 5$'$ read end marks the contact at $\sim$nucleotide resolution. Two IP replicates + SMInput control.
-  \item PureCLIP \parencite{krakau2017}: HMM over read 5$'$-start density; ``crosslinked'' vs.\ ``background'' states; optional SMInput covariate. Bandwidth = signal smoothing, merge distance = site grouping, wrong values give too few or too many sites.
-  \item What makes a site set ``good'': reproducibility (chance-corrected), motif enrichment (PWM log-odds vs.\ shuffled background), benchmark recall (ENCODE reference regions).
-  \item PWMs / position weight matrices: each candidate motif is scored as log-odds against a uniform background and scanned over a $\pm 15$\,nt window around every binding site (a site ``hits'' if it beats 80\% of the PWM's score range). Motifs are drawn from five databases (mCrossBase, ATtRACT, RBPmap, oRNAment, RBPDB). For each \emph{site set} (the binding sites produced by one run), we report the hit rate of the \emph{most enriched} motif, where enrichment is the hit rate over a per-window mononucleotide-shuffle background.
-  \item LLM as a reasoning optimizer (domain priors + reading structured feedback) vs.\ Bayesian optimization / TPE \parencite{bergstra2011}, as implemented in Optuna \parencite{akiba2019} (surrogate model, exploration/exploitation, no domain knowledge).
-  % Figure to add (not printed): pipeline schematic eCLIP reads -> PureCLIP ->
-  % sites -> scoring.
-\end{itemize}
+PureCLIP models the distribution of read starts along the genome and assigns
+positions to background or crosslink-associated states~\parencite{krakau2017}.
+Its bandwidth parameter controls signal smoothing, while the merge distance
+determines when nearby events are combined. Additional settings regulate the use
+of SMInput, calling stringency, and post-processing. Excessive smoothing can
+merge distinct events, whereas insufficient smoothing can fragment a coherent
+signal. The appropriate balance may therefore depend on both the protein and the
+experiment.
 
-% Goal: give the reader the conceptual background needed to understand
-% the project. Biological concepts first, then the computational tools.
-% Implementation specifics belong in §3.
+\subsection{Evaluation signals}
 
-% ── 1. eCLIP and RNA-binding proteins ─────────────────────────────────
-%   • RBPs regulate RNA post-transcriptionally (splicing, stability,
-%     localisation, translation). Dysregulation is linked to cancer and
-%     neurological disease.
-%   • eCLIP (Van Nostrand et al. 2016): UV crosslink → immunoprecipitation
-%     → sequencing. Reverse transcriptase truncates at the crosslink site,
-%     so the 5′ read end marks the contact position at ~nucleotide
-%     resolution. Two IP replicates + SMInput (size-matched input) control.
-%   • The three RBPs studied, their canonical RNA motifs, and the two
-%     cell lines (K562 leukemia, HepG2 liver). Brief table or inline list.
+No single external gold standard defines the correct binding sites for an eCLIP
+experiment. We therefore combine three complementary signals. \emph{Replicate
+reproducibility} measures the fraction of merged calls supported by both IP
+replicates and corrects this fraction using chromosome-preserving shuffled
+intervals. \emph{Motif support} measures the fraction of site-centered windows
+containing a position-weight-matrix (PWM) match for the target RBP. The pipeline
+evaluates candidate PWMs from five motif resources and retains the hit rate of
+the motif with the largest enrichment over a mononucleotide-shuffled background.
+\emph{Reference recall} measures the fraction of strong ENCODE regions recovered
+by the call set. These quantities capture experimental consistency, sequence
+plausibility, and agreement with an external reference, respectively.
 
-% ── 2. Peak calling with PureCLIP ─────────────────────────────────────
-%   • Conceptual role: converts a pile-up of aligned reads into a discrete
-%     set of binding sites. Necessary step between raw sequencing and
-%     biological interpretation.
-%   • PureCLIP mechanism: HMM over read 5′-start density; states
-%     "crosslinked" vs. "background"; optionally uses SMInput as a
-%     covariate to subtract non-specific signal.
-%   • Why parameters matter: bandwidth controls smoothing of the signal;
-%     merge distance controls how nearby sites are grouped. Wrong values
-%     produce either too few (over-filtered) or too many (noisy) sites,
-%     and the right values depend on the dataset.
+The informativeness of motif support differs among RBPs. PUM2 has a relatively
+specific sequence motif, HNRNPK recognizes C-rich but more variable sequences,
+and U2AF2 binding is strongly associated with polypyrimidine tracts near splice
+sites. We refer to these cases as crisp, degenerate, and positional for the
+purpose of the ablation design. These labels are qualitative study annotations,
+not outputs of the scoring pipeline.
 
-% ── 3. What makes a binding-site set "good" ───────────────────────────
-%   • Reproducibility: real binding recurs across independent replicates;
-%     noise does not. Chance-correction is needed because broad intervals
-%     overlap by chance even for random site sets.
-%   • Motif enrichment: genuine sites should be enriched for the RBP's
-%     known RNA recognition sequence relative to shuffled background.
-%     PWMs (position weight matrices) provide a quantitative scoring model.
-%   • Benchmark recall: good calls should recover the curated set of
-%     strong regions from the ENCODE reference pipeline.
+\subsection{Optimization strategies}
 
-% ── 4. LLMs as reasoning-based optimizers ─────────────────────────────
-%   • Large language models (LLMs) can incorporate domain knowledge
-%     (priors about biology, known failure modes) into their proposals,
-%     going beyond pure black-box function optimization.
-%   • In an iterative loop, an LLM can read structured feedback (score
-%     deltas per iteration) and reason about which parameter to change
-%     next, analogous to a human expert tuning settings by hand, but
-%     automated and consistent.
+TPE separates observations with high and low objective values, models their
+parameter distributions, and proposes candidates that are more likely under the
+high-performing model~\parencite{bergstra2011}. Optuna provides a reproducible TPE
+implementation with seeded sampling~\parencite{akiba2019}. The method observes the
+scalar objective but has no representation of RBP biology.
 
-% ── 5. Bayesian optimization (Optuna / TPE) ───────────────────────────
-%   • Bayesian optimization builds a probabilistic surrogate model of the
-%     objective surface from previous evaluations and uses it to choose
-%     the next point to evaluate (exploration vs. exploitation trade-off).
-%   • Tree-structured Parzen Estimator (TPE) models the distribution of
-%     good and bad parameter sets separately and samples from the ratio.
-%     No domain knowledge needed; purely data-driven.
+An LLM can instead receive a natural-language task description, structured
+measurements, and domain context before proposing a candidate. Prior work has
+shown that language models can be used in iterative optimization
+loops~\parencite{yang2023opro}. In this study, the relevant distinction is not
+between automated and manual reasoning; both approaches are automated. The
+question is whether biological context and decomposed feedback produce useful
+search decisions beyond those obtained from numerical black-box optimization.

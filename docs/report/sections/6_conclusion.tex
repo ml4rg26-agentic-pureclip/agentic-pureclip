@@ -1,23 +1,18 @@
 \section{Conclusion}
 \label{conclusion}
 
+This work presents an automated framework for optimizing PureCLIP and
+post-processing parameters on eCLIP data. The LLM and TPE strategies share the
+same bounded search space, workflow, composite objective, and durable result
+records. The framework thereby supports auditable comparisons while protecting
+against degenerate few-site solutions.
 
-\begin{itemize}
-  \item Restate what was built: an automated eCLIP parameter-optimization framework with two interchangeable optimizers (LLM + Optuna), a biologically grounded composite objective with a collapse guard, and a reproducible dashboard.
-  \item Restate the expanded benchmark (5 $\rightarrow$ 26 datasets, 3 $\rightarrow$ 15 RBPs, adding several new splicing-factor RBPs) as the main empirical scope.
-  \item Key finding: [state which optimizer won and on how many datasets].
-  \item Takeaway: LLM-guided optimization is (or is not) a viable alternative to Bayesian search for small bioinformatics parameter spaces, and the framework transfers directly to other CLIP datasets or peak callers.
-  % Status note (not printed): fill the verdict in the two bullets above once the
-  %   LLM-vs-Optuna comparison on the new datasets finishes.
-\end{itemize}
-
-% ── Outline (~0.25 page) ───────────────────────────────────────────────
-%   • Restate what was built: an automated eCLIP parameter optimization
-%     framework with two interchangeable optimizers (LLM + Optuna) and a
-%     biologically grounded composite objective.
-%   • Key finding: [state which optimizer performed better and on how many
-%     datasets], with the composite guard preventing degenerate solutions.
-%   • Main takeaway: LLM-guided optimization is a viable alternative to
-%     Bayesian search for small bioinformatics parameter spaces, and the
-%     approach is immediately transferable to other CLIP datasets or
-%     peak callers.
+In the completed chromosome-21 experiments, optimization gains varied by dataset.
+Biological context improved the LLM result for HNRNPK but not for PUM2 or U2AF2,
+and the predicted monotonic relationship between motif difficulty and prior
+benefit was not observed. TPE produced higher best scores in the principal
+datasets, but unequal evaluation counts and one incomplete run preclude a fair
+optimizer ranking. The main outcome is therefore methodological rather than a
+claim of LLM superiority: the study establishes a reproducible test bed and
+identifies the controls needed for a conclusive comparison. Equal-budget,
+replicated, and genome-wide evaluation is the next step.

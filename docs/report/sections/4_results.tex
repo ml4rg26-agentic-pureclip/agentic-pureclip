@@ -1,48 +1,127 @@
 \section{Results}
 \label{results}
 
+The principal comparison comprises nine optimizer--dataset combinations across
+PUM2, HNRNPK, and U2AF2. Eight completed normally; U2AF2 TPE ended after two
+evaluations because the batch reached its time limit. QKI and PUM1 are reported
+separately as pilots. Every value is the best composite score observed in one
+chromosome-21 run and should be interpreted as a point estimate.
 
-\begin{itemize}
-  \item \textbf{Baseline vs.\ LLM vs.\ Optuna head-to-head (original 5 datasets).} Report the \texttt{bigrun2} comparison (both optimizers, collapse-guarded objective), per-dataset winner + overall, \emph{against a default-parameter baseline}: does either optimizer actually beat untuned PureCLIP?
-  \item \textbf{New splicing factors, preliminary chr21 (LLM).} Composites observed so far, e.g.\ U2AF2\_K562 $\approx$0.44 (highest of the new set), PTBP1\_HepG2 $\approx$0.28, HNRNPK\_K562 $\approx$0.23 / HepG2 $\approx$0.21 (after the PSSM fix). 18/20 completed on the first pass; HNRNPK required the log-odds fix.
-  \item \textbf{Biological quality.} Reproducibility (RBFOX2\_K562 hardest, $\approx$0.10); motif-enrichment table (best motif, hit-rate, background, enrichment, canonical Yes/No, PWM source); benchmark recall on chr21.
-  \item \textbf{Cross-cell-line.} Same RBP in K562 vs.\ HepG2, do optimal parameters differ (validates the dataset-dependent tuning premise)?
-  \item \textbf{Collapse-guard effectiveness.} $n_{\text{sites}}$ distribution across trials; before/after for Optuna if pre-guard data exists.
-  \item \textbf{Caveats on the numbers.} All results are chr21 (fast mode) only, with no full-genome confirmation yet, and each config is run once (no repeated seeds), so we report point estimates without a significance or variability test.
-  % Status note (not printed): the head-to-head table for the 20 new datasets is
-  %   pending, the comparison batch (config/insight_llm_vs_optuna.yaml) is running.
-  % Figure to add (not printed): per-dataset convergence plots (composite vs.
-  %   iteration, LLM vs. Optuna, baseline marked), exportable from the dashboard.
-\end{itemize}
+\subsection{Optimization gains depended on the dataset}
 
-% ── 1. LLM vs. Optuna head-to-head ────────────────────────────────────
-%   TABLE, one row per dataset × optimizer:
-%   Dataset | Optimizer | Best composite | Repro | Motif | Recall | n_sites
-%   State which optimizer won per dataset and overall. Note the budget
-%   asymmetry (LLM 10–12 iters, Optuna 12–15) as a caveat.
-%   Multi-panel figure: iteration vs. composite for both optimizers,
-%   default-parameter baseline marked. Highlights convergence speed
-%   and whether LLM reasoning led to stepwise improvements.
+Table~\ref{tab:h2h} compares each search with the shared default configuration.
+For PUM2, all three searches improved the default score of 0.260, with gains from
+0.092 to 0.124. HNRNPK also improved under the prior-equipped LLM ($+0.087$) and
+TPE ($+0.133$), while the no-prior LLM returned to the default as its best
+configuration. In contrast, the prior-equipped LLM did not improve the U2AF2
+default. The no-prior arm improved it by 0.037. The incomplete TPE run found a
+score of 0.488 in its second evaluation, but it cannot be treated as a converged
+result.
 
-% ── 2. Biological quality of the optimized sites ──────────────────────
-%   2a. Reproducibility, bar chart per dataset: observed vs. chance-
-%       expected overlap and the corrected score. Highlight RBFOX2_K562
-%       as the hardest case (baseline ≈ 0.10).
-%   2b. Motif enrichment, table: best motif, hit rate, background rate,
-%       enrichment, canonical match (Yes/No), PWM source. Note any
-%       dataset where the canonical motif is not top-ranked.
-%   2c. Benchmark recall, per-dataset recovery of ENCODE reference
-%       regions (chr21). Note recall vs. n_sites trade-off if visible.
+The pilots show the same dataset dependence. On QKI, the LLM arms improved the
+default by 0.029--0.039, whereas TPE improved it by only 0.001. Neither completed
+search improved the PUM1 default; the reported TPE value is additionally affected
+by the yield penalty because its best trial contained seven sites.
 
-% ── 3. Dataset-specific findings ──────────────────────────────────────
-%   • Which parameters converged to similar values across datasets
-%     (suggesting universal optima) vs. diverged (dataset-dependent)?
-%   • RBFOX2_K562 vs. RBFOX2_HepG2: do optimal parameters differ for
-%     the same RBP in different cell lines? (validates tuning premise)
-%   • Any dataset where the LLM's reasoning trace reveals a biologically
-%     interpretable decision (e.g. "widening bandwidth improved repro").
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+Dataset & Motif class & Default & LLM prior & LLM no prior & TPE \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Principal three-arm experiment}}\\
+PUM2   & crisp      & 0.260 & 0.352 (7) & 0.383 (9) & 0.371 (14) \\
+HNRNPK & degenerate & 0.242 & 0.329 (7) & 0.242 (5) & 0.375 (16) \\
+U2AF2  & positional & 0.423 & 0.423 (5) & 0.460 (6) & 0.488 (2)\textsuperscript{\dag} \\
+\midrule
+\multicolumn{6}{@{}l}{\emph{Supplementary pilots}}\\
+QKI    & crisp      & 0.293 & 0.332 (6) & 0.322 (6) & 0.294 (14) \\
+PUM1   & crisp      & 0.364 & 0.364 (5) & --- & 0.325 (6)\textsuperscript{\dag} \\
+\bottomrule
+\end{tabular}
+\caption{Best composite score by dataset and optimizer. Parentheses give the
+number of evaluated configurations, including the default for LLM runs.
+\textsuperscript{\dag}The run ended at the batch time limit and is incomplete.}
+\label{tab:h2h}
+\end{table}
 
-% ── 4. Collapse guard effectiveness ───────────────────────────────────
-%   n_binding_sites distribution across all trials. Demonstrate healthy
-%   yields under the guard; if pre-guard data exists, before/after
-%   comparison for Optuna.
+\subsection{The prior ablation did not follow a monotonic difficulty trend}
+
+The difference between the two LLM arms was $-0.031$ for PUM2, $+0.087$ for
+HNRNPK, and $-0.037$ for U2AF2. Thus, the biological prior was associated with a
+higher score only for HNRNPK. This pattern does not support the proposed monotonic
+relationship in which prior benefit increases from crisp to degenerate to
+positional binding. It is instead consistent with a dataset-specific effect, but
+one dataset per motif class is insufficient to establish a class-level
+relationship.
+
+Figure~\ref{fig:convergence} shows that the HNRNPK difference emerged within two
+LLM updates. The no-prior arm explored four alternatives without exceeding the
+default, whereas the prior-equipped arm reached 0.329. PUM2 shows the opposite
+pattern: the no-prior LLM achieved the highest score among the three arms. For
+U2AF2, the prior-equipped LLM retained the default while the no-prior arm improved
+after changing merge distance and minimum crosslink support.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\linewidth]{images/convergence_ablation.png}
+\caption{Best observed composite score by evaluation in the principal
+experiment. Horizontal lines mark the shared default configuration. The unequal
+curve lengths reflect algorithm-specific stopping and, for U2AF2 TPE, the batch
+time limit.}
+\label{fig:convergence}
+\end{figure}
+
+\subsection{The available protocol does not identify a superior optimizer}
+
+TPE exceeded the prior-equipped LLM by 0.019 on PUM2 and 0.046 on HNRNPK. It
+also produced the highest observed U2AF2 score, although that run was incomplete.
+Conversely, the prior-equipped LLM exceeded TPE by 0.038 in the completed QKI
+pilot. The PUM1 comparison is not interpretable because the TPE run timed out and
+its best trial fell below the ten-site threshold.
+
+These differences do not constitute a controlled ranking. Completed TPE runs
+evaluated approximately twice as many configurations as the LLM runs, and two
+TPE runs were truncated by wall-clock limits. The results demonstrate that both
+strategies can locate improvements, but an equal-budget replicated experiment is
+needed to compare their efficiency and final performance.
+
+\subsection{Metric decomposition and decision trace}
+
+The best HNRNPK LLM configuration increased replicate reproducibility from 0.273
+to 0.435 and motif hit rate from 0.273 to 0.348, while reference recall decreased
+from 0.15 to 0.10 (Table~\ref{tab:bio}). Its first proposal invoked HNRNPK's
+C-rich motif to reduce bandwidth from 50 to 30 nt and simultaneously increased
+merge distance. That combined proposal initially lowered the composite score.
+The following proposal retained the narrower bandwidth, restored the merge
+distance, and increased the minimum crosslink count; this configuration achieved
+the reported maximum. The trace therefore shows that the prior changed the
+agent's search rationale, but it does not isolate bandwidth as the causal source
+of improvement.
+
+Across the representative best trials, motif enrichment was highest for PUM2 and
+lowest for U2AF2. U2AF2 instead exhibited high reference recall and a much larger
+site count. These differences illustrate why the composite must be decomposed:
+similar aggregate scores can represent distinct biological and computational
+trade-offs.
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+Dataset & Arm & Repro. & Motif hit (enr.) & Recall & Sites & Composite \\
+\midrule
+PUM2   & LLM prior    & 0.368 & 0.421 ($16.0\times$) & 0.25 & 38  & 0.352 \\
+HNRNPK & LLM prior    & 0.435 & 0.348 ($8.0\times$)  & 0.10 & 23  & 0.329 \\
+HNRNPK & TPE          & 0.583 & 0.333 ($4.0\times$)  & 0.00 & 12  & 0.375 \\
+U2AF2  & LLM no prior & 0.387 & 0.268 ($3.5\times$)  & 0.80 & 414 & 0.460 \\
+QKI    & LLM prior    & 0.364 & 0.500 ($11.0\times$) & 0.10 & 22  & 0.332 \\
+\bottomrule
+\end{tabular}
+\caption{Components of selected best-scoring trials. Motif enrichment (enr.)
+is calculated relative to the mononucleotide-shuffled background and is not a
+term in Equation~\ref{eq:composite}; the corresponding motif hit rate is.}
+\label{tab:bio}
+\end{table}

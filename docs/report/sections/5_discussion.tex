@@ -1,56 +1,74 @@
-\section{Discussion, Limitations \& Future Work}
+\section{Discussion}
 \label{discussion}
 
+\subsection{Interpretation}
 
-\begin{itemize}
-  \item \textbf{Note: interpretations are expectations, not results yet.} The full LLM-vs-Optuna head-to-head (and the motif-difficulty side-experiment) are still running, so the points below are framed as what we expect the results to show, to be confirmed once the numbers land.
-  \item \textbf{Interpretation via motif difficulty (hypothesis).} Proteins differ in how sequence-defined their binding is, a spectrum from \emph{crisp} k-mer motifs (RBFOX2 \texttt{UGCAUG}, PUM \texttt{UGUANAUA}), through \emph{degenerate} ones (HNRNPK C-rich, SRSF1 GA-rich), to \emph{positional} / non-k-mer binders (U2AF2 polypyrimidine tract, SF3B1/4 branch point). The motif term is a strong signal for the first group and a weak one for the last. We therefore expect the LLM's biological prior to help most where that signal is weakest and Optuna is searching blind, i.e.\ the LLM's margin over Optuna should widen crisp $\rightarrow$ degenerate $\rightarrow$ positional. A focused side-experiment (\texttt{config/insight\_llm\_vs\_optuna.yaml}: PUM2 / SRSF1 / HNRNPK / U2AF2 / SF3B4, K562, both optimizers) tests this; the batch is still running. Note the difficulty label is our manual annotation, not a quantity the pipeline computes, and if the margin does \emph{not} widen, that is itself a finding: the prior buys little on hard proteins.
-  \item \textbf{The single fixed objective does not fit every dataset.} Our composite is one hard-coded formula applied to all datasets, which has two distinct consequences:
-    \begin{itemize}
-      \item \emph{Equal-replicate assumption (supervisor's point).} The reproducibility term (weight $0.5$) treats the two lab replicates as equally good. If we know one replicate is of much lower quality, its agreement score is misleading and the fixed weights cannot compensate. We keep the current weighting for time; quality-aware or learned weighting is the natural fix.
-      \item \emph{Weak motif proxy for positional binders.} For U2AF/SF3B/RBM22 the motif term (weight $0.25$) is only a proxy, because binding is defined by splice-site position, not a k-mer. Composite scores for these should be read with care; a positional prior is the natural fix (identified, not implemented).
-    \end{itemize}
-  \item \textbf{Infrastructure as a contribution.} The shared-objective dashboard and manifest-driven runners make the study reproducible and the LLM-vs-Optuna comparison auditable per iteration.
-  \item Limitations already outlined below: chr21-only, small search space, single LLM (no prompt ablation), budget asymmetry, mononucleotide-shuffle background, ENCODE reference is pipeline output not gold standard.
-  \item \textbf{Future work.} The new data enables a paired cross-cell-line reproducibility analysis (K562 vs.\ HepG2), which we have not yet run. To pin down where any LLM advantage comes from, an iso-budget re-run (equal trial counts) and a prior-ablation of the LLM (removing the biological priors and the delta table) are the natural next steps.
-\end{itemize}
+The experiments support two conclusions. First, parameter optimization can
+materially improve PureCLIP call sets, but the magnitude of improvement depends
+on the dataset. PUM2 and HNRNPK benefited from search, whereas the default was
+already competitive for U2AF2 and PUM1. This variation supports the motivation
+for dataset-specific tuning, although the current sample is too small to identify
+which experimental properties predict a gain.
 
-% ── 1. Interpretation ─────────────────────────────────────────────────
-%   LLM advantage (if observed): biological priors (collapse avoidance,
-%   expected footprint, motif identity) give the LLM a head start that
-%   TPE must learn from data; delta-driven reversal of bad moves provides
-%   implicit gradient information.
-%   Optuna advantage (if observed): 7-parameter space is small enough for
-%   TPE to map quickly; LLM's one-param-at-a-time conservatism may limit
-%   multi-dimensional exploration; budget asymmetry (12–15 vs 10–12 iters)
-%   may confound the comparison.
-%   Broader point: LLM advantages likely scale with problem complexity.
+Second, biological context influenced LLM performance, but not uniformly. The
+positive HNRNPK ablation result is biologically plausible: C-rich motif and
+footprint information directed the agent toward sharper, more strongly supported
+calls. However, the same prior formulation reduced the best score on PUM2 and
+U2AF2. For U2AF2, sequence motifs are an incomplete description of binding because
+position relative to splice sites is central. More generally, one observation per
+motif class cannot distinguish a class effect from idiosyncrasies of a dataset or
+a stochastic LLM trajectory. The HNRNPK result should therefore be treated as a
+candidate mechanism for further testing, not as evidence that priors generally
+benefit proteins with degenerate motifs.
 
-% ── 2. Biological interpretation ──────────────────────────────────────
-%   • RBFOX2_K562 (hardest): wider bandwidth (>50 nt) helped, suggests
-%     diffuse crosslink signal or broad footprints.
-%   • Cell-line effects: if optimal parameters differ between RBFOX2_K562
-%     and RBFOX2_HepG2, this validates the dataset-dependent tuning premise.
-%   • use_input_covariate: note whether enabling it consistently improved
-%     or hurt different datasets.
+The study also shows why interpretability must be assessed carefully. The LLM
+produced readable rationales and adapted its proposals after unfavorable score
+changes. Nevertheless, a plausible explanation is not a causal analysis. Several
+parameters changed together, and the objective provides no gradient that assigns
+an improvement to one change. Factorial follow-up experiments around selected
+LLM proposals would be required to test those explanations.
 
-% ── 3. Limitations ────────────────────────────────────────────────────
-%   (a) chr21-only: ~1.5% of the genome; results may not generalise to
-%       full-genome landscapes with different gene density and repeat content.
-%   (b) Small search space (~10^5 combinations): limits how much LLM
-%       reasoning can outperform systematic sampling.
-%   (c) Single LLM, no prompt ablation: only DeepSeek tested; no ablation
-%       of priors, delta table, or temperature.
-%   (d) Budget asymmetry: LLM 10–12 iters vs. Optuna 12–15, not iso-budget.
-%   (e) Motif background: mononucleotide shuffle destroys dinucleotide
-%       context; dinucleotide shuffling would be more rigorous.
-%   (f) Benchmark reference: ENCODE "top regions" are themselves pipeline
-%       output, not manually curated gold standard.
+\subsection{Limitations of the comparison}
 
-% ── 4. Future work ────────────────────────────────────────────────────
-%   (a) Genome-wide validation of best chr21 parameters.
-%   (b) IDR-based reproducibility (ENCODE standard) to replace simple
-%       overlap.
-%   (c) Dinucleotide-shuffled motif background.
-%   (d) LLM ablation: remove priors / delta table; test other models;
-%       iso-budget re-run.
+The common pipeline and objective remove an important source of confounding, but
+the computational budgets were not matched. LLM runs began at the default and
+typically stopped after five to nine evaluations. TPE began with sampled
+configurations, retained a ten-trial startup phase, and completed 14--16
+evaluations when time allowed. Wall-clock limits truncated two TPE runs. The
+observed best scores therefore compare available trajectories rather than equal
+search effort. Runtime, API cost, and the number of successful evaluations should
+all be fixed or reported in a definitive comparison.
+
+The biological evaluation has further limitations. All experiments were
+restricted to chromosome~21 and were run once, so neither genome-wide transfer
+nor run-to-run variability was measured. The reproducibility background uses only
+three shuffled interval sets. Mononucleotide shuffling controls base composition
+but not dinucleotide structure. ENCODE reference regions are outputs of another
+analysis pipeline rather than experimentally verified ground truth. Finally, the
+motif component selects the most enriched PWM from a protein-specific catalog.
+Catalog size and motif quality may therefore affect comparability among RBPs, and
+a sequence-based term is poorly matched to strongly positional binders.
+
+The composite objective also encodes normative choices. Its fixed weights treat
+replicates as equally reliable and value motif support identically across
+proteins. A high composite may conceal a loss in one component, as observed for
+HNRNPK reference recall. For this reason, decomposed metrics should accompany the
+aggregate score, and future objectives should incorporate replicate quality and
+protein-appropriate evidence.
+
+\subsection{Future work}
+
+The immediate priority is a replicated, equal-budget comparison on the expanded
+dataset registry. Each optimizer should receive the same number of successful
+pipeline evaluations, with multiple TPE seeds and multiple LLM sampling seeds.
+Reporting best-score trajectories against both evaluation count and wall-clock
+time would separate sample efficiency from computational cost. The prior ablation
+should include several RBPs in each pre-specified motif class.
+
+Methodologically, positional binders require a feature based on distance to
+annotated splice sites or branch points rather than a generic PWM score.
+Dinucleotide-preserving sequence backgrounds and a more robust reproducibility
+estimator would strengthen the remaining components. Finally, the best
+chromosome-21 configurations should be evaluated genome-wide on held-out data;
+without this step, the optimized settings should not be interpreted as validated
+production parameters.

@@ -1,41 +1,41 @@
-\documentclass[oneside,a4paper,12pt]{article}
+\documentclass[oneside,a4paper,11pt]{article}
 
 \usepackage{thesis}
+% ── Report-local layout: fit the 10-page budget without editing thesis.sty ──
+\geometry{lmargin=2.1cm,rmargin=2.1cm,tmargin=2.1cm,bmargin=2.1cm}
+\renewcommand{\baselinestretch}{1.08}
+\setlength{\parskip}{0.12cm}
 \usepackage{enumitem}
 \usepackage{csquotes}
 \usepackage[backend=biber, style=apa]{biblatex}
 \usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black,
+  citecolor=black,
+  urlcolor=blue!45!black
+}
 \addbibresource{master.bib}
-
-% ── Report-writing scaffolding helpers (remove once prose is final) ──────
-% \TODO{...}      red, visible-on-page marker for work still missing.
-% \scaffold{...}  marks bullet lists that are notes-to-self, not final prose.
-\newcommand{\TODO}[1]{\textcolor{red}{\textbf{[TODO]}~#1}}
-\newcommand{\scaffold}[1]{\textcolor{blue!55!black}{\textbf{Scaffold:}~\itshape #1}}
-% \alertbox{...}  amber "to investigate later" callout (visible in the PDF).
-\newcommand{\alertbox}[1]{%
-  \begin{center}\fcolorbox{orange!65!black}{orange!8}{%
-    \parbox{0.94\linewidth}{\small\textbf{$\triangleright$~To investigate (time permitting):}~#1}}%
-  \end{center}}
+\fancyhead[LO]{\slshape\small Automated optimization of PureCLIP parameters}
 
 \begin{document}
 \setlanguageEnglish
 
-\include{sections/preamble}
+\input{sections/preamble}
 
-\include{sections/1_introduction}
-\include{sections/2_theory}
-\include{sections/3_method}
-\include{sections/4_results}
-\include{sections/5_discussion}
-\include{sections/6_conclusion}
+\input{sections/1_introduction}
+\input{sections/2_theory}
+\input{sections/3_method}
+\input{sections/4_results}
+\input{sections/5_discussion}
+\input{sections/6_conclusion}
 
-% Anhang / Appendix
-\appendix % Ab hier wird mit A, B, ... weiternummeriert.
+\clearpage
+\appendix
 
-\include{sections/7_appendix}
+\input{sections/7_appendix}
 
-% Literaturverzeichnis
+\clearpage
 \printbibliography
 
 \end{document}

@@ -1,9 +1,4 @@
-\pagenumbering{roman}
-\include{sections/titlepage}
-%\tableofcontents\newcounter{roemisch} %\setcounter{roemisch}{\value{page}}
-\ifthenelse{\boolean{english}}
-% {\cleardoublepage\printnoidxglossary[type=acronym,sort=letter,nonumberlist,title={List of Abbreviations}]}
-\cleardoublepage\listoffigures
-\cleardoublepage\setcounter{page}{2} 
-\cleardoublepage
+\pagenumbering{gobble}
+\input{sections/titlepage}
+\clearpage
 \pagenumbering{arabic}
