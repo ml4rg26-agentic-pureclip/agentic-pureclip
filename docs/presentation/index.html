@@ -525,35 +525,130 @@
             <span class="tag">Approach</span>
             <h2>How the LLM decides — prompt &amp; reasoning</h2>
           </div>
+          <!--
+          ===================== EXACT LLM PROMPT (reference) =====================
+          Source: src/agentic_pureclip/scoring/objective.py :: build_decision_prompt
+          on the develop branch (the prompt used for the final runs). The {…} tokens
+          are filled at runtime. {DEFAULT_MIN_SITES} = 10; current weights =
+          reproducibility=0.5, motif=0.25, recall=0.25. A "your previous answer was
+          rejected" block is prepended when a proposed change is invalid or repeated.
+
+          You are analysing eCLIP data for the RNA-binding protein described in
+          PRIOR KNOWLEDGE below, tuning a two-stage peak-calling pipeline (PureCLIP +
+          post-processing) to recover this protein's true binding sites. Use what is
+          known about its binding biology to guide every parameter choice, and keep the
+          recovered sites biologically plausible.
+
+          Your goal is to MAXIMISE the COMPOSITE quality score, a weighted blend (weights
+          renormalised over the terms present; current weights: {weights_str}) of three
+          metrics, all in [0, 1]:
+            * reproducibility    — replicate agreement corrected for chance overlap. Unlike
+              raw agreement this CANNOT be inflated by keeping only a few broad sites.
+            * motif_hit_rate     — fraction of sites carrying the expected RNA motif
+              (biological validity).
+            * known_site_recall  — fraction of known-strong ENCODE reference regions your
+              sites recover. Collapsing the number of sites LOWERS this term.
+
+          Because recall punishes site collapse and reproducibility is chance-corrected,
+          trimming sites to chase agreement no longer helps — you must find sites that are
+          reproducible, motif-bearing AND cover the known binding regions.
+
+          COLLAPSE GUARD: the composite is multiplied by min(1, n_binding_sites/{DEFAULT_MIN_SITES}).
+          Below {DEFAULT_MIN_SITES} sites the score is ramped toward zero, so a handful of
+          "perfect" sites is NOT a win. Keep a healthy number of binding sites.
+
+          PRIOR KNOWLEDGE (use this to reason about the biology, not just the statistics):
+          {priors as JSON — target_protein, clip_protocol, expected_footprint_width_nt,
+           known_motifs, primary_objective_metric, objective_weights}
+
+          HOW THE BIOLOGY SHOULD INFORM YOUR CHOICES:
+            - Relate bandwidth_nt and force_width to the known motif length and to whether
+              this protein binds in sharp, point-like sites or in broader regions. A short,
+              well-defined motif is poorly served by a very large bandwidth or a very wide
+              force_width, which blur a precise site; a protein binding broad regions
+              tolerates wider settings. force_width should not be so wide that it dilutes a
+              short motif, nor so narrow that it cuts off the binding region.
+            - Let the protein's preferred_binding region (e.g. intron, 3'UTR) and its role in
+              RNA processing inform how permissive to be, alongside the score deltas.
+            - If your reasoning could apply unchanged to any generic signal-processing task
+              without mentioning THIS protein, you have NOT used the prior knowledge. Name the
+              target protein, its motif and its preferred_binding region explicitly.
+
+          SEARCH BOUNDS (hard limits, never exceed these):
+          {search_bounds as JSON}
+
+          CURRENT TUNABLE PARAMETERS:
+          {current tunable parameters as JSON}
+
+          LATEST SCORE (composite={current_composite}):
+          {latest score_report as JSON}
+
+          PROGRESS (oldest first; d_* are deltas vs the previous attempt):
+          {per-iteration progress as JSON}
+
+          DECISION RULES:
+          1. Ground each choice in this protein's binding biology (motif length, point-like
+             vs broad binding, preferred_binding region) together with the observed deltas —
+             not a fixed assumption that relaxing or tightening always helps.
+          2. Read the deltas: keep moving parameters in directions that raised composite,
+             reverse directions that lowered it.
+          3. Prefer changing ONE parameter at a time so its effect stays interpretable, but
+             you MAY change 2 to 3 together when you have a specific reason to expect them to
+             interact — state what you expect each change to do. Avoid changing many at once,
+             which makes the result impossible to attribute to any single cause.
+          4. Do not repeat any previous parameter set, and avoid trivial one-unit changes
+             that do not meaningfully explore the space.
+          5. Stay strictly inside the search bounds.
+          6. Only change parameters listed in SEARCH BOUNDS.
+          7. If reproducibility rose but known_site_recall or motif_hit_rate fell, you are
+             likely discarding real sites — prefer reverting or trying a different parameter.
+          8. If n_sites is collapsing and recall is dropping, relax stringency (lower
+             min_crosslink_events, raise merge_distance_nt) to recover sensitivity.
+
+          Respond ONLY with JSON:
+          {"reasoning": "reflect on this RBP's role and preferred_binding region, name the
+            trend you saw in the deltas, explain how the biology informs your choice, and why
+            you chose this direction",
+           "changes": {"pureclip": {...}, "postprocessing": {...}}}
+          =================== END EXACT LLM PROMPT ===================
+          -->
           <div class="cols">
             <div class="col">
               <h3>What it's given (system prompt, excerpt)</h3>
               <div
                 class="figbox"
-                style="text-align: left; font-size: 13px; line-height: 1.5"
+                style="text-align: left; font-size: 12.5px; line-height: 1.5"
               >
-                <p>You are optimising PureCLIP parameters for eCLIP data.</p>
-                <p style="color: #c0392b">
-                  <b>MAXIMISE the composite quality score</b> — a blend of
-                  reproducibility, motif and recall.
+                <p>
+                  You are analysing eCLIP data for the RNA-binding protein in
+                  PRIOR KNOWLEDGE, tuning PureCLIP + post-processing to recover its
+                  true binding sites.
                 </p>
                 <p style="color: #c0392b">
-                  <b>PRIOR KNOWLEDGE:</b> target RBFOX2, motif
-                  <code>UGCAUG</code>, footprint ~9 nt.
+                  <b>Use what is known about its binding biology to guide every
+                  parameter choice.</b>
                 </p>
                 <p>
-                  SEARCH BOUNDS + the full history with per-iteration deltas …
+                  <b>PRIOR KNOWLEDGE:</b> the target protein, its known RNA motif
+                  (RBFOX2 <code>UGCAUG</code>), expected footprint ~9 nt.
                 </p>
                 <p style="color: #c0392b">
-                  <b
-                    >If reproducibility rose but recall/motif fell, you are
-                    discarding real sites — revert.</b
-                  >
+                  <b>Relate bandwidth &amp; force_width to the motif length and to
+                  whether it binds in sharp, point-like sites or broad regions.</b>
+                </p>
+                <p>
+                  <b>Goal:</b> maximise the composite (reproducibility + motif +
+                  recall); keep enough sites (collapse guard).
+                </p>
+                <p style="color: #c0392b">
+                  <b>If reproducibility rose but recall or motif fell, you are
+                  discarding real sites — revert.</b>
                 </p>
               </div>
               <p class="tiny">
                 The <span style="color: #c0392b">red</span> lines are what steer
                 each decision.
+                <span style="color: var(--muted)">(full prompt in this slide's HTML comment)</span>
               </p>
             </div>
             <div class="col">
@@ -789,18 +884,32 @@
           <div class="mock-badge">
             ILLUSTRATIVE — placeholder numbers (6 proteins in both K562 and HepG2)
           </div>
-          <div class="cols">
-            <div class="col">
-              <img class="chart" src="figures/crosscell.svg" alt="On how many of the 6 proteins the LLM beat Optuna, per cell line" />
-            </div>
-            <div class="col" style="display: flex; flex-direction: column; justify-content: center">
-              <ul class="big">
-                <li>The 6 proteins run in <b>both cell lines</b> show the <b>same LLM-vs-Optuna pattern</b>.</li>
-                <li>Tie on crisp, LLM ahead on hard — in <b>K562 and HepG2 alike</b>.</li>
-                <li>So the result is <b>not a K562 artefact</b>.</li>
-              </ul>
-            </div>
-          </div>
+          <table class="restable">
+            <thead>
+              <tr>
+                <th>Protein</th>
+                <th>Motif</th>
+                <th>K562 LLM</th>
+                <th>K562 Optuna</th>
+                <th>HepG2 LLM</th>
+                <th>HepG2 Optuna</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- AUTO:crosscell:start -->
+              <tr><td>RBFOX2</td><td><span class="chip easy">crisp</span></td><td class="win">0.64</td><td>0.63</td><td class="win">0.61</td><td>0.60</td></tr>
+              <tr><td>QKI</td><td><span class="chip easy">crisp</span></td><td class="win">0.33</td><td>0.29</td><td class="win">0.58</td><td>0.57</td></tr>
+              <tr><td>HNRNPK</td><td><span class="chip mid">degenerate</span></td><td class="win">0.40</td><td>0.34</td><td class="win">0.38</td><td>0.33</td></tr>
+              <tr><td>SRSF1</td><td><span class="chip mid">degenerate</span></td><td class="win">0.37</td><td>0.30</td><td class="win">0.35</td><td>0.31</td></tr>
+              <tr><td>U2AF2</td><td><span class="chip hard">positional</span></td><td class="win">0.44</td><td>0.31</td><td class="win">0.42</td><td>0.30</td></tr>
+              <tr><td>SF3B4</td><td><span class="chip hard">positional</span></td><td class="win">0.35</td><td>0.24</td><td class="win">0.33</td><td>0.25</td></tr>
+              <!-- AUTO:crosscell:end -->
+            </tbody>
+          </table>
+          <p class="tiny" style="color: var(--muted)">
+            Winner coloured per pair — <b style="color: var(--llm)">orange = LLM</b> ·
+            <b style="color: #3a7bd0">blue = Optuna</b>.
+          </p>
           <p class="footnote">
             The same shape — <b>tie on crisp, LLM ahead on hard</b> — reproduces
             in HepG2, so the result isn't a K562 artefact.

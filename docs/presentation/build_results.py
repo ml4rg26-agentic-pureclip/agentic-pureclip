@@ -282,12 +282,18 @@ def rows_ablation(agg):
 
 
 def rows_crosscell(agg):
+    def pair(llm, opt):
+        # colour the winning cell of the pair: LLM win -> orange (.win), Optuna win -> blue
+        if llm >= opt:
+            return f'<td class="win">{f2(llm)}</td><td>{f2(opt)}</td>'
+        return f'<td>{f2(llm)}</td><td style="font-weight:800;color:#3a7bd0">{f2(opt)}</td>'
+
     out = []
     for p in CC_ORDER:
         c = agg["crosscell"][p]
         out.append(f'<tr><td>{p}</td><td>{chip(TIER[p])}</td>'
-                   f'{td(c["k562"]["llm"], c["k562"]["llm"] > c["k562"]["optuna"])}{td(c["k562"]["optuna"])}'
-                   f'{td(c["hepg2"]["llm"], c["hepg2"]["llm"] > c["hepg2"]["optuna"])}{td(c["hepg2"]["optuna"])}</tr>')
+                   + pair(c["k562"]["llm"], c["k562"]["optuna"])
+                   + pair(c["hepg2"]["llm"], c["hepg2"]["optuna"]) + "</tr>")
     return out
 
 
@@ -418,30 +424,7 @@ def render_charts(agg: dict, runs: dict, outdir: Path) -> list[str]:
                     fontsize=10.5, fontweight="bold")
     save(fig, "sites_mock.svg")
 
-    # 5) cross-cell-line: on how many of the 6 proteins each optimizer wins, per cell line (slide 13)
-    def wins(cell_key):
-        lw = sum(1 for p in CC_ORDER
-                 if agg["crosscell"][p][cell_key]["llm"] > agg["crosscell"][p][cell_key]["optuna"])
-        return lw, len(CC_ORDER) - lw
-
-    keys = [("K562", "k562"), ("HepG2", "hepg2")]
-    xpos = list(range(len(keys)))
-    fig, ax = plt.subplots(figsize=(4.9, 3.05))
-    b1 = ax.bar([p - 0.19 for p in xpos], [wins(k)[0] for _, k in keys], width=0.36,
-                color=COLORS["llm"], label="LLM better")
-    b2 = ax.bar([p + 0.19 for p in xpos], [wins(k)[1] for _, k in keys], width=0.36,
-                color=COLORS["optuna"], label="Optuna better")
-    ax.set_xticks(xpos); ax.set_xticklabels([d for d, _ in keys])
-    ax.set_ylabel(f"# of {len(CC_ORDER)} proteins"); ax.set_ylim(0, len(CC_ORDER) + 1.8)
-    ax.set_title("Who wins, by cell line", fontsize=12.5, loc="left", fontweight="bold",
-                 color=COLORS["ink"])
-    ax.grid(axis="y", color=COLORS["grid"])
-    for bars in (b1, b2):
-        for b in bars:
-            ax.annotate(f"{int(b.get_height())}", (b.get_x() + b.get_width() / 2, b.get_height()),
-                        ha="center", va="bottom", fontsize=10.5, fontweight="bold")
-    ax.legend(frameon=False, fontsize=9, loc="upper center", ncol=2)
-    save(fig, "crosscell.svg")
+    # (cross-cell-line is shown as a coloured table on slide 13, not a chart.)
 
     return files
 
