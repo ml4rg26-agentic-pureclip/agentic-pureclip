@@ -1,0 +1,30 @@
+# ~12h batch — the LLM-prior ablation gradient across the difficulty axis.
+# One K562 dataset per tier, all three arms each, so we get both the head-to-head
+# (llm vs optuna) AND the prior-benefit ablation (llm vs llm_noprior) at rising
+# difficulty — the "prior helps more as the motif degrades / becomes positional"
+# figure. Jobs are copied verbatim from config/final_results_jobs.yaml.
+#
+# Ordered cheapest-tier-first and dataset-grouped, so a partial run (12h cap) still
+# yields whole datasets. Launch:
+#   PYTHONPATH=. uv run python scripts/run/overnight_batch.py \
+#     --manifest config/batch_ablation_gradient.yaml --hours 12 --no-repeat \
+#     --pureclip-dir /vol/storage1/johannes/projects
+defaults:
+  threads: 32
+  learn_on_chr21: true
+  per_job_timeout_min: 300
+  objective_weights: {reproducibility: 0.5, motif: 0.25, recall: 0.25}
+
+jobs:
+  # PUM2 — crisp (near-free positive control; UGUANAUA family, like PUM1)
+  - {id: final_pum2_k562_llm,           dataset: PUM2_K562,   optimizer: llm,    max_iter: 16}
+  - {id: final_pum2_k562_optuna,        dataset: PUM2_K562,   optimizer: optuna, max_iter: 16}
+  - {id: final_pum2_k562_llm_noprior,   dataset: PUM2_K562,   optimizer: llm,    max_iter: 16, no_priors: true}
+  # HNRNPK — degenerate motif
+  - {id: final_hnrnpk_k562_llm,         dataset: HNRNPK_K562, optimizer: llm,    max_iter: 16}
+  - {id: final_hnrnpk_k562_optuna,      dataset: HNRNPK_K562, optimizer: optuna, max_iter: 16}
+  - {id: final_hnrnpk_k562_llm_noprior, dataset: HNRNPK_K562, optimizer: llm,    max_iter: 16, no_priors: true}
+  # U2AF2 — positional binder (motif is a weak proxy; expect the largest prior gap)
+  - {id: final_u2af2_k562_llm,          dataset: U2AF2_K562,  optimizer: llm,    max_iter: 16}
+  - {id: final_u2af2_k562_optuna,       dataset: U2AF2_K562,  optimizer: optuna, max_iter: 16}
+  - {id: final_u2af2_k562_llm_noprior,  dataset: U2AF2_K562,  optimizer: llm,    max_iter: 16, no_priors: true}

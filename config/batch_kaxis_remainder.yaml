@@ -1,0 +1,33 @@
+# ~11h batch — the remaining K562 difficulty-axis datasets not covered by the
+# ablation-gradient run (config/batch_ablation_gradient.yaml did PUM2 / HNRNPK /
+# U2AF2, one per tier). This completes the K562 axis EXCEPT RBFOX2, which is left
+# to a dedicated run (~10-12h alone for its 3 arms). Jobs copied verbatim from
+# config/final_results_jobs.yaml.
+#
+# Ordered cheapest-tier-first and dataset-grouped, so a partial run (11h cap) still
+# yields whole datasets. QKI/PUM1 are the older smoke datasets, re-run here under
+# the final manifest (16-iter cap, shared early-stop, arm tags). Launch:
+#   PYTHONPATH=. uv run python scripts/run/overnight_batch.py \
+#     --manifest config/batch_kaxis_remainder.yaml --hours 11 --no-repeat \
+#     --pureclip-dir /vol/storage1/johannes/projects
+defaults:
+  threads: 32
+  learn_on_chr21: true
+  per_job_timeout_min: 300
+  objective_weights: {reproducibility: 0.5, motif: 0.25, recall: 0.25}
+
+jobs:
+  # QKI — crisp (head-to-head only)
+  - {id: final_qki_k562_llm,           dataset: QKI_K562,   optimizer: llm,    max_iter: 16}
+  - {id: final_qki_k562_optuna,        dataset: QKI_K562,   optimizer: optuna, max_iter: 16}
+  # PUM1 — crisp (head-to-head only)
+  - {id: final_pum1_k562_llm,          dataset: PUM1_K562,  optimizer: llm,    max_iter: 16}
+  - {id: final_pum1_k562_optuna,       dataset: PUM1_K562,  optimizer: optuna, max_iter: 16}
+  # SRSF1 — degenerate motif (+ no-priors)
+  - {id: final_srsf1_k562_llm,         dataset: SRSF1_K562, optimizer: llm,    max_iter: 16}
+  - {id: final_srsf1_k562_optuna,      dataset: SRSF1_K562, optimizer: optuna, max_iter: 16}
+  - {id: final_srsf1_k562_llm_noprior, dataset: SRSF1_K562, optimizer: llm,    max_iter: 16, no_priors: true}
+  # SF3B4 — positional binder (+ no-priors)
+  - {id: final_sf3b4_k562_llm,         dataset: SF3B4_K562, optimizer: llm,    max_iter: 16}
+  - {id: final_sf3b4_k562_optuna,      dataset: SF3B4_K562, optimizer: optuna, max_iter: 16}
+  - {id: final_sf3b4_k562_llm_noprior, dataset: SF3B4_K562, optimizer: llm,    max_iter: 16, no_priors: true}

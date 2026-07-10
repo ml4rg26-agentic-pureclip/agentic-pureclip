@@ -34,6 +34,46 @@ def test_optuna_runs_budget_and_respects_bounds(monkeypatch):
     assert study.best_value > 0
 
 
+def test_optuna_early_stop_after_startup(monkeypatch):
+    """A flat objective should trip the shared early-stop, but only past startup."""
+    cfg = orr._with_iteration_output(dataset_to_config("RBFOX2_K562"))
+
+    def flat_eval(config, config_path, search_bounds=None):
+        return {"reproducibility_score": 0.3, "motif_hit_rate": 0.3, "benchmark_region_recall": 0.3}
+
+    monkeypatch.setattr(orr, "evaluate_config", flat_eval)
+    monkeypatch.setattr(orr, "save_config", lambda *a, **k: None)
+
+    study = orr.run_optuna(
+        cfg, max_iter=30, weights=DEFAULT_OBJECTIVE_WEIGHTS, seed=1,
+        patience=4, improvement_threshold=0.01, startup_trials=10,
+    )
+    # Must stop early (well under the 30 cap) but never before startup + patience.
+    n = len(study.trials)
+    assert n < 30, "early-stop never fired on a flat objective"
+    assert n >= 10 + 4, f"stopped during/too soon after startup ({n} trials)"
+
+
+def test_optuna_no_early_stop_when_improving(monkeypatch):
+    """A strictly improving objective must run the full budget (no early stop)."""
+    cfg = orr._with_iteration_output(dataset_to_config("RBFOX2_K562"))
+    n_calls = {"i": 0}
+
+    def rising_eval(config, config_path, search_bounds=None):
+        n_calls["i"] += 1
+        v = min(0.9, 0.01 * n_calls["i"])  # monotonic climb
+        return {"reproducibility_score": v, "motif_hit_rate": v, "benchmark_region_recall": v}
+
+    monkeypatch.setattr(orr, "evaluate_config", rising_eval)
+    monkeypatch.setattr(orr, "save_config", lambda *a, **k: None)
+
+    study = orr.run_optuna(
+        cfg, max_iter=20, weights=DEFAULT_OBJECTIVE_WEIGHTS, seed=1,
+        patience=4, improvement_threshold=0.005, startup_trials=10,
+    )
+    assert len(study.trials) == 20
+
+
 def test_optuna_applies_bool_params(monkeypatch):
     """high_precision_mode / use_input_covariate are applied as booleans, not ints."""
     cfg = orr._with_iteration_output(dataset_to_config("RBFOX2_K562"))

@@ -178,25 +178,45 @@ def _log_tail(path: Path, n_lines: int = 40) -> str:
 
 # ── result collection ───────────────────────────────────────────────────────
 
+def arm_of(optimizer: str, no_priors: bool) -> str:
+    """Label a job's experimental arm so analyses slice cleanly.
+
+    `optimizer` alone can't tell the priors-on LLM from the no-priors LLM; the arm
+    tag distinguishes head-to-head (llm/optuna) from the ablation (llm_noprior).
+    """
+    if optimizer == "optuna":
+        return "optuna"
+    return "llm_noprior" if no_priors else "llm"
+
+
 def collect_iterations(results_root: str, job_id: str, dataset: str, weights: dict,
-                       optimizer: str = "llm") -> list[dict]:
+                       optimizer: str = "llm", arm: str = "llm", no_priors: bool = False) -> list[dict]:
     root = ROOT / results_root
-    records = []
     if not root.exists():
-        return records
-    for report_path in root.glob("*/score_report.json"):
+        return []
+    # Recursive glob (Change 4): the LLM re-nests reports under a timestamped session
+    # subdir (results_root/<dataset>_<ts>/<iter>/score_report.json, two levels down)
+    # while Optuna writes one level down. A one-level glob silently dropped every LLM
+    # iteration; "**" catches both. De-dup by run_id, keeping the newest report, in
+    # case a run_id ever recurs across re-nested subdirs.
+    by_run: dict[str, dict] = {}
+    for report_path in root.glob("**/score_report.json"):
         try:
             d = json.loads(report_path.read_text())
         except Exception:
             continue
         comp = composite_objective(d, weights)
-        records.append({
+        run_id = d.get("run_id")
+        mtime = report_path.stat().st_mtime
+        rec = {
             "type": "iteration",
             "job_id": job_id,
             "dataset": dataset,
             "optimizer": optimizer,
-            "run_id": d.get("run_id"),
-            "iteration": _iter_index(d.get("run_id", "")),
+            "arm": arm,
+            "no_priors": no_priors,
+            "run_id": run_id,
+            "iteration": _iter_index(run_id or ""),
             "n_binding_sites": d.get("n_binding_sites"),
             "replicate_agreement": d.get("replicate_agreement"),
             "reproducibility_score": d.get("reproducibility_score"),
@@ -207,8 +227,12 @@ def collect_iterations(results_root: str, job_id: str, dataset: str, weights: di
             "benchmark_region_overlap": d.get("benchmark_region_overlap"),
             "composite": round(comp, 4) if comp is not None else None,
             "params": d.get("params"),
-            "mtime": report_path.stat().st_mtime,
-        })
+            "mtime": mtime,
+        }
+        key = run_id or str(report_path)
+        if key not in by_run or mtime > by_run[key]["mtime"]:
+            by_run[key] = rec
+    records = list(by_run.values())
     records.sort(key=lambda r: (r["iteration"] if r["iteration"] is not None else 0))
     return records
 
@@ -220,11 +244,15 @@ def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
     started = time.time()
     job_id, cfg, max_iter, results_root, weights, optimizer = build_job_config(job, defaults, pass_idx)
     script = OPTIMIZER_SCRIPTS.get(optimizer, OPTIMIZER_SCRIPTS["llm"])
+    no_priors = bool(job.get("no_priors"))
+    arm = arm_of(optimizer, no_priors)
     record = {
         "type": "job",
         "job_id": job_id,
         "dataset": job["dataset"],
         "optimizer": optimizer,
+        "arm": arm,
+        "no_priors": no_priors,
         "pass": pass_idx,
         "max_iter": max_iter,
         "weights": weights,
@@ -249,6 +277,9 @@ def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
     env["CONFIG_PATH"] = str(cfg_path.relative_to(ROOT))
     env["MAX_ITER"] = str(max_iter)
     env["PYTHONPATH"] = "."
+    if job.get("no_priors"):
+        # Change 2: no-priors ablation — the LLM prompt withholds biological priors.
+        env["LLM_NO_PRIORS"] = "1"
     if extra_path:
         env["PATH"] = f"{extra_path}:{env.get('PATH', '')}"
 
@@ -278,7 +309,8 @@ def run_one_job(job, defaults, pass_idx, job_timeout_s, extra_path):
 
     # Always try to collect whatever iterations were scored, even on failure.
     try:
-        iterations = collect_iterations(results_root, job_id, job["dataset"], weights, optimizer)
+        iterations = collect_iterations(results_root, job_id, job["dataset"], weights,
+                                         optimizer, arm=arm, no_priors=no_priors)
     except Exception:
         iterations = []
 
@@ -325,7 +357,7 @@ def _terminate_tree(proc):
 # ── driver ──────────────────────────────────────────────────────────────────
 
 def write_summary(jobs_records: list[dict], path: Path) -> None:
-    cols = ["job_id", "dataset", "optimizer", "pass", "status", "failure_hint", "best_composite",
+    cols = ["job_id", "dataset", "optimizer", "arm", "pass", "status", "failure_hint", "best_composite",
             "iterations_scored", "max_iter", "exit_code", "duration_s"]
     with open(path, "w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=cols, extrasaction="ignore")

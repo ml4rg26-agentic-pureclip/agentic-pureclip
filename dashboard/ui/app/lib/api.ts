@@ -16,6 +16,7 @@ export interface Params {
 export interface IterationRow {
   run_id: string;
   optimizer?: string;
+  arm?: string;
   iter: number | null;
   n_sites: number | null;
   agreement: number | null;
@@ -60,6 +61,7 @@ export interface Plan {
 export interface ActiveRun {
   is_active: boolean;
   optimizer: string | null;
+  arm?: string | null;
   decide_label: string;
   job_id: string | null;
   stage: string;
@@ -163,6 +165,27 @@ export const fmt = (v: number | null | undefined, d = 4) =>
   v === null || v === undefined ? "—" : Number(v).toFixed(d);
 export const fmtx = (v: number | null | undefined) =>
   v === null || v === undefined ? "—" : `${Number(v).toFixed(2)}×`;
+
+// The three sampling strategies compared across the dashboard. `arm` distinguishes
+// the no-priors LLM ablation from the priors LLM (both have optimizer === "llm").
+export type ArmKey = "llm" | "llm_noprior" | "optuna";
+export interface ArmMeta {
+  key: ArmKey; name: string; tag: string; color: string; badge: string; desc: string;
+}
+export function armMeta(arm?: string | null): ArmMeta {
+  switch (arm) {
+    case "optuna":
+      return { key: "optuna", name: "Optuna", tag: "TPE", color: "var(--yellow)", badge: "badge-optuna",
+        desc: "Bayesian TPE sampler — the no-domain-knowledge baseline optimizer." };
+    case "llm_noprior":
+      return { key: "llm_noprior", name: "LLM", tag: "no prior", color: "var(--purple)", badge: "badge-noprior",
+        desc: "LLM with the motif/protein prior withheld — the ablation." };
+    default:
+      return { key: "llm", name: "LLM", tag: "prior", color: "var(--blue)", badge: "badge-llm",
+        desc: "LLM guided by the RBP's known motif and biology." };
+  }
+}
+export const ARM_ORDER: ArmKey[] = ["llm", "llm_noprior", "optuna"];
 
 export function humanDur(s: number | null | undefined): string {
   if (s === null || s === undefined) return "—";

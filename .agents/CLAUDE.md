@@ -182,13 +182,39 @@ changed + reasoning, from `decisions.jsonl`), **Plan run** (pick dataset, params
 
 ---
 
-## 5. Compute VM & dashboard ops (`ssh bio`)
+## 5. Compute VM & dashboard ops (SSH gateway / Tailscale)
 
-- Host alias `bio` → VM `agenticpureclipvm-751a3` (32 cores, 251 GB RAM). Project
-  at `/vol/storage1/johannes/projects/agentic-pureclip`.
+- VM `agenticpureclipvm-751a3` (32 cores, ~251 GB RAM). Project at
+  `/vol/storage1/johannes/projects/agentic-pureclip`. Full runbook:
+  `docs/deploy-a-new-batch-job.md`.
+- **Access: try the `ssh bio` gateway first; fall back to Tailscale when it's
+  down.** Two routes reach the *same* VM (`agenticpureclipvm-751a3`):
+  1. **de.NBI SSH gateway (primary)** — `ssh bio`, aliased in `~/.ssh/config` to
+     `ubuntu@194.94.4.28:30121`, key `~/.ssh/id_ed25519`. This is the normal route,
+     but it's **intermittent**: it goes dark whenever the cluster is shut down (and
+     historically only admits registered project users), so it isn't always up.
+  2. **Tailscale (fallback)** — when `ssh bio` times out/refuses, reach the VM on
+     the tailnet at `ssh -i ~/.ssh/id_ed25519 ubuntu@100.87.34.54` (VM tailnet IP;
+     tailnet account `johannesstephan36@`). Bring the Mac onto the tailnet with
+     `sudo brew services start tailscale` then `tailscale up`. Our pubkey
+     `jopast@js-mac-book-pro` is in the VM's `authorized_keys`.
+
+  The `ssh bio …` examples below work as-is over the gateway; over Tailscale,
+  substitute `ubuntu@100.87.34.54` (with `-i ~/.ssh/id_ed25519`). Quick liveness
+  check: `ssh -o ConnectTimeout=10 bio hostname`.
+- **Root disk is ~96% full (927 MB free); `/vol/storage1` has ~500 GB.** Keep all
+  work — repo, data, results — on `/vol/storage1`. `mv` between result dirs there
+  is instant (same filesystem), which is how old results get archived to
+  `results/archive/` before a fresh batch.
 - The runner copy is **not a git checkout** (git commands fail there) — it's
-  deployed by copying files in. To ship a local fix, `scp` the file(s) directly,
-  e.g. `scp pipeline/motifs.py bio:/vol/storage1/johannes/projects/agentic-pureclip/pipeline/`.
+  deployed by copying files in. Ship local changes with **rsync** (keeps
+  data/results/.env/.venv intact):
+  ```bash
+  rsync -av --exclude .git --exclude .venv --exclude data --exclude results \
+    --exclude .env --exclude '__pycache__' --exclude '*.pyc' \
+    -e "ssh -i ~/.ssh/id_ed25519" ./ ubuntu@100.87.34.54:/vol/storage1/johannes/projects/agentic-pureclip/
+  ```
+  (or `scp` a single file for a quick one-off fix).
 - **Non-interactive SSH does not source the interactive PATH.** A bare
   `ssh bio '… uv run …'` fails with `uv: command not found`, then
   `ModuleNotFoundError: pipeline`, then `pureclip2: command not found`. To launch
@@ -207,11 +233,16 @@ changed + reasoning, from `decisions.jsonl`), **Plan run** (pick dataset, params
   `agent` packages. Prefer **tmux** for anything long-lived (a bare `&` over a
   non-detached SSH channel can hang it); `nohup … &` with a redirect works for
   fire-and-forget.
-- View the dashboard locally: tunnel the API with
-  `ssh -f -N -L 8888:localhost:8888 bio`, then run the UI locally
-  (`cd dashboard/ui && npm run dev` → http://localhost:5173, proxies `/api` →
-  the tunnel). If data is stale, the tunnel often died — kill and re-establish
-  it. `uv run uvicorn dashboard.api.main:app --port 8888` is the backend.
+- View the dashboard locally: the deploy is **Docker Compose** (`docker-compose.yml`)
+  — `api` + `ui` + Caddy `proxy` — and only the proxy's port **8080** is published,
+  routing `/api/*`→api, else→ui. So tunnel just that one port:
+  `ssh -f -N -L 8080:localhost:8080 bio` → http://localhost:8080. Over Tailscale
+  instead: `ssh -f -N -L 8080:localhost:8080 -i ~/.ssh/id_ed25519 ubuntu@100.87.34.54`.
+  No need to run the UI locally — the `ui` container serves the built SPA. If data
+  is stale the tunnel likely died — `pkill -f 'ssh.*-L 8080'` and re-establish.
+  After shipping code changes (rsync above), redeploy with
+  `docker compose up -d --build` (rebuilds `api`+`ui`; leaves running batch jobs
+  untouched, briefly restarts only the dashboard containers).
 - Result stores (all gitignored, runner-only): `results/batch/` (from
   `batch_runner.py`: per-run `<id>_<ts>/` dirs with `decisions.jsonl` +
   per-iteration `score_report.json`, plus `_summary.tsv`) and `results/overnight/`
