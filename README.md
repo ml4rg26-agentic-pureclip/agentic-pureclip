@@ -1,138 +1,120 @@
 # Agentic PureCLIP
 
-Parameter optimization for **eCLIP** peak calling with
-[PureCLIP](https://github.com/skrakau/PureCLIP). An optimizer proposes PureCLIP +
-post-processing parameters; for each set the pipeline runs PureCLIP, scores the
-result against biological quality signals, and iterates to maximize a composite
-quality score. Two interchangeable optimizers share the same evaluation and
-objective — an **LLM agent** (DeepSeek, via LangGraph) and **Optuna**
-(TPE/Bayesian) — so they can be compared apples-to-apples.
+Agentic PureCLIP is a research framework for automated parameter optimization in
+[PureCLIP](https://github.com/skrakau/PureCLIP) eCLIP peak calling. It provides a
+shared experimental test bed for comparing a biology-informed large language
+model (LLM) agent with numerical black-box optimization.
 
-A live **dashboard** tracks every run, and a small **CLI** launches them.
+The project asks whether automated search can improve eCLIP binding-site calls,
+whether an LLM can compete with a Tree-structured Parzen Estimator (TPE), and
+whether RBP-specific biological context changes the LLM's search behavior.
 
-![Dashboard](docs/images/dashboard.png)
+## Research motivation
 
-## What it does
+Enhanced crosslinking and immunoprecipitation (eCLIP) measures RNA-binding
+protein (RBP) contacts transcriptome-wide, but the assay produces aligned reads
+rather than a definitive set of binding sites. PureCLIP infers those sites with a
+hidden Markov model whose output depends on signal smoothing, site merging,
+covariate, and post-processing parameters. Suitable values may vary across RBPs,
+cell lines, and experiments, making manual tuning difficult to standardize.
 
-From pre-aligned, deduplicated ENCODE BAM files (IP replicates + size-matched
-input), the Snakemake pipeline merges IP → runs `pureclip2` → per-replicate
-PureCLIP → post-processes to a standardized footprint → scores. The optimizer
-loops this, searching for the parameters that give the most trustworthy binding
-sites.
+Agentic PureCLIP turns parameter selection into an iterative optimization
+problem. Every candidate configuration is evaluated by the same Snakemake
+workflow and biological objective, regardless of which optimizer proposed it.
+This isolates the proposal strategy from the downstream peak-calling and scoring
+machinery.
 
-### Objective (`agentic_pureclip.scoring.objective::composite_objective`)
+## Experimental design
 
-```
-composite = (0.5·reproducibility + 0.25·motif + 0.25·recall) × min(1, n_sites/10)
-```
+The framework compares three experimental arms:
 
-- **reproducibility** — chance-corrected cross-replicate agreement.
-- **motif** — fraction of sites bearing the RBP's RNA motif (log-odds PWM, most-enriched).
-- **recall** — fraction of known-strong ENCODE reference regions recovered.
-- **collapse guard** — `min(1, n_sites/10)` so collapsing to a few "perfect" sites can't win.
+1. **LLM with biological priors** — DeepSeek receives RBP identity, known motifs,
+   decomposed score feedback, and prior iterations.
+2. **LLM without biological priors** — the same agent and feedback, with the
+   RBP-specific context withheld.
+3. **TPE** — Optuna proposes parameters using the same bounds, evaluation
+   workflow, and scalar objective.
 
-Weights are configurable per run via `priors.objective_weights`.
+Each evaluation follows the same path:
 
-## Quick start
-
-Toolchain is **uv**; the LLM is **DeepSeek** (`DEEPSEEK_API_KEY` in `.env`).
-
-```bash
-uv sync                              # installs the project (editable) + deps
-cp .env.example .env                 # add DEEPSEEK_API_KEY (Optuna needs no key)
-uv run python -m pytest tests/ -q    # tests (DEEPSEEK_API_KEY=dummy is fine)
-```
-
-### Run an optimization
-
-```bash
-# LLM agent
-CONFIG_PATH=config/run_config.yaml MAX_ITER=8 uv run python -m agentic_pureclip.loop.graph
-
-# Optuna (same eval + objective, no API key)
-CONFIG_PATH=config/run_config.yaml MAX_ITER=12 uv run python -m agentic_pureclip.loop.optuna_runner
-```
-
-`learn_on_chr21: true` in the config restricts PureCLIP to chr21 ("fast mode",
-minutes/iter); set it `false` for a full-genome run (hours/pass). The best
-parameters are saved to `config/best_config.yaml`.
-
-### Launch a run with the CLI
-
-`agentic-pureclip-run` is the one command for starting a parameter search — it
-writes a standard batch manifest and runs the pipeline within a wall-clock budget,
-isolating each job so a single failure never aborts the run. The dashboard's
-**Plan run** page builds this exact command for you to copy.
-
-```bash
-uv run agentic-pureclip-run \
-    --dataset RBFOX2_K562 --optimizer llm \
-    --max-iter 8 --hours 4 --threads 32 --chr21 \
-    --weight reproducibility=0.5 --weight motif=0.25 --weight recall=0.25 \
-    --param pureclip.bandwidth_nt=20:100 --param postprocessing.force_width=3:15
+```text
+two eCLIP IP replicates + SMInput + GRCh38
+                    │
+                    ▼
+       PureCLIP and post-processing
+                    │
+                    ▼
+ reproducibility · motif support · reference recall
+                    │
+                    ▼
+             composite score
+                    │
+                    └──── feedback to optimizer
 ```
 
-It prints a job id and a log path; the dashboard then tracks the run live. Add
-`--dry-run` to preview the manifest and launch command without starting anything.
-Results accumulate under `results/overnight/` (`iterations.jsonl`, `jobs.jsonl`,
-`summary.csv`, `<job>/decisions.jsonl`).
+The optimizer searches seven PureCLIP and post-processing parameters. Runs are
+recorded as durable configuration, decision, and score artifacts so that the
+comparison remains auditable.
 
-## Dashboard
+## Evaluation objective
 
-The dashboard has four pages: **Dashboard** (active run, queue/ETA, and a
-per-dataset leaderboard with LLM-vs-Optuna head-to-head), **Runs** (per-iteration
-decision trail), **Plan run** (configure a search and copy its CLI command), and
-**Variables** (a plain-English guide to every knob).
+Candidate binding-site sets are assessed using three complementary signals:
 
-### View the deployed dashboard
+- **Replicate reproducibility:** chance-corrected support across the two IP
+  replicates.
+- **Motif support:** hit rate of the most enriched target-RBP PWM relative to a
+  sequence-shuffled background.
+- **Reference recall:** recovery of strong ENCODE reference regions.
 
-The dashboard runs as a Docker Compose stack on the compute VM. It's bound to the
-VM's localhost, so open an SSH tunnel and browse `http://localhost:8080`:
+With the default weights, the objective is
 
-```bash
-ssh -N -L 8080:localhost:8080 -p 30121 -i ~/.ssh/id_ed25519 ubuntu@194.94.4.28
-# then open http://localhost:8080
+```text
+S = (0.50 × reproducibility + 0.25 × motif support + 0.25 × reference recall)
+    × min(1, number of sites / 10)
 ```
 
-The dashboard is **read-only monitoring** — it shows live run data but doesn't
-launch jobs itself. Start runs with `agentic-pureclip-run` (above); the **Plan
-run** page generates that command for you.
+The final factor penalizes degenerate solutions containing only a few apparently
+perfect sites. Weights are configurable and are renormalized if a component is
+unavailable.
 
-Running it yourself (dev servers or the Compose stack) and the deployment details
-are in the [developer onboarding guide](docs/developer-onboarding.md).
+## Empirical scope and findings
 
-## Datasets
+The software registry contains 26 ENCODE datasets spanning 15 RBPs in K562 and
+HepG2 cells. The reported experiment is intentionally narrower: PUM2, HNRNPK,
+and U2AF2 in K562 form the principal chromosome-21 prior-ablation study, with QKI
+and PUM1 as supplementary pilots.
 
-Registered in `agentic_pureclip.pipeline.datasets` (RBFOX2, QKI, PUM1/PUM2,
-U2AF1/U2AF2, and more, across K562 and HepG2). `data/` and `results/` are
-gitignored. Regenerate a dataset config:
+The current evidence is preliminary:
 
-```bash
-python scripts/data/write_dataset_config.py RBFOX2_K562 --out config/datasets/RBFOX2_K562.yaml
-```
+- automated optimization gains were dataset-dependent;
+- biological priors improved the LLM result for HNRNPK, but not for PUM2 or
+  U2AF2;
+- TPE achieved the highest observed score on the three principal datasets, but
+  unequal evaluation counts and an incomplete run prevent a controlled optimizer
+  ranking.
 
-## Repo layout
+The main contribution is therefore methodological: a reproducible framework for
+testing optimizer behavior against decomposed biological quality signals. A
+conclusive comparison requires replicated, equal-budget, genome-wide runs.
 
-The core is one installable package, `src/agentic_pureclip/`, whose subpackages
-are the three things this project contributes — the optimization **loop**, the
-**scoring**, and the **postprocessing** — plus the plumbing under `pipeline/` and
-run-launching under `run/`.
+## Research artifacts
 
-| Path | What |
-|------|------|
-| `src/agentic_pureclip/loop/` | The optimization loop: `graph.py` (LLM/LangGraph), `optuna_runner.py` (TPE), shared `evaluation.py` / `state.py` / `report.py` |
-| `src/agentic_pureclip/scoring/` | Quality signals + objective: `run_scorers.py`, `objective.py` |
-| `src/agentic_pureclip/postprocess/` | Standardized footprint + the `Snakefile` |
-| `src/agentic_pureclip/pipeline/` | Plumbing: bounds, datasets, motifs (PWM), Snakemake runner |
-| `src/agentic_pureclip/run/` | Run scheduling shared by the CLI and dashboard (`schedule.py`, `launcher.py`, `cli.py`) |
-| `scripts/` | Ops utilities: `data/`, `motifs/`, `run/` |
-| `dashboard/` | The dashboard: `api/` (FastAPI) + `ui/` (React SPA) + `proxy/` (Caddy), `docker-compose.yml` at the repo root |
-| `config/`, `tests/`, `docs/` | Run/dataset configs; pytest suite; architecture notes, onboarding, and the thesis (`docs/report/`) |
+| Artifact | Location |
+|---|---|
+| Thesis source and complete study account | [`docs/report/`](docs/report/) |
+| Experimental and run configurations | [`config/`](config/) |
+| Architecture and data flow | [`docs/architecture-overview.md`](docs/architecture-overview.md) |
+| Dataset expansion notes | [`docs/NEW_DATA_INVESTIGATION.md`](docs/NEW_DATA_INVESTIGATION.md) |
+| Interactive research presentation | [`docs/presentation/index.html`](docs/presentation/index.html) |
+| Monitoring dashboard documentation | [`dashboard/README.md`](dashboard/README.md) |
 
-## Compute VM
+Raw eCLIP data, reference files, and generated results are intentionally excluded
+from version control. Configurations and code define the experiment; large inputs
+and outputs live under the ignored `data/`, `ref/`, and `results/` directories.
 
-Long runs and the dashboard live on the VM at
-`/vol/storage1/johannes/projects/agentic-pureclip`. `pureclip2` is not on the
-default PATH — prepend `/vol/storage1/johannes/projects` (the CLI's
-`--pureclip-dir` defaults to this). Container images are stored on
-`/vol/storage1` (the root disk is small); see the onboarding guide for details.
+## Reproducing and extending the work
+
+Installation, external bioinformatics dependencies, data preparation, execution
+commands, testing, dashboard setup, repository structure, and VM deployment are
+documented in the [developer onboarding guide](docs/developer-onboarding.md).
+The [report build guide](docs/report/ONBOARDING.md) covers the LaTeX manuscript.

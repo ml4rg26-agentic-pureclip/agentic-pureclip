@@ -1,178 +1,154 @@
-# Agentic PureCLIP — Architecture Overview
+# Architecture overview
 
-## Core Purpose
+Agentic PureCLIP is organized around one controlled comparison: different
+optimizers propose parameters, but every proposal is evaluated by the same
+PureCLIP workflow and biological objective.
 
-Agentic PureCLIP is an automated parameter optimization system for **eCLIP peak calling**. It drives **PureCLIP** (an HMM-based crosslink-site caller) to find the parameter settings that produce the highest-quality RNA-binding protein (RBP) binding site calls from eCLIP sequencing data. Quality is measured against three biological signals: replicate reproducibility, RBP motif enrichment, and recall against a curated ENCODE reference set.
+## System boundary
 
-Two interchangeable optimizers are provided:
-- **LLM-driven** (DeepSeek via LangGraph) — uses an LLM that reads previous iteration results and reasons about which parameters to try next.
-- **Optuna-driven** (TPE sampler) — uses Bayesian optimization with the same objective function, no API key required.
-
-Both run the same `evaluate_config` function, making their results directly comparable.
-
----
-
-## High-Level Architecture
-
-```
-┌───────────────────────────────────────────────────────────────┐
-│                        Optimizers (agent/)                     │
-│   LLM loop (graph.py)          Optuna runner (optuna_runner.py)│
-│         │                              │                        │
-│         └──────────┬───────────────────┘                        │
-│                    ▼                                            │
-│           evaluation.py — evaluate_config()                    │
-└───────────────────────┬───────────────────────────────────────┘
-                        │  writes run_config.yaml, reads score_report.json
-                        ▼
-┌───────────────────────────────────────────────────────────────┐
-│                      Pipeline (workflow/)                       │
-│   Snakemake DAG:                                               │
-│     merge IP BAMs → PureCLIP (all + per-rep) →                │
-│     postprocess.py (footprint normalization) →                  │
-│     run_scorers.py → score_report.json                         │
-└───────────────────────┬───────────────────────────────────────┘
-                        │  score_report.json
-                        ▼
-┌───────────────────────────────────────────────────────────────┐
-│                     Scoring (scorers/)                          │
-│  reproducibility · motif PWM hit-rate · benchmark recall       │
-│       → composite_objective() → single [0,1] score            │
-└───────────────────────────────────────────────────────────────┘
-                        │  results written to results/overnight/
-                        ▼
-┌───────────────────────────────────────────────────────────────┐
-│        Monitoring & UI (dashboard/api FastAPI + dashboard/ui)  │
-│  REST API + React SPA: Dashboard · Runs · Plan run · Variables │
-└───────────────────────────────────────────────────────────────┘
+```text
+                         ┌───────────────────────┐
+                         │ Optimizer             │
+                         │ LLM agent or TPE      │
+                         └───────────┬───────────┘
+                                     │ candidate parameters
+                                     ▼
+┌──────────────────┐      ┌───────────────────────┐
+│ eCLIP BAMs       │─────▶│ Shared evaluation     │
+│ GRCh38 reference │      │ config + Snakemake    │
+│ ENCODE benchmark │      └───────────┬───────────┘
+│ motif PWMs       │                  │ binding sites
+└──────────────────┘                  ▼
+                         ┌───────────────────────┐
+                         │ Biological scoring    │
+                         │ reproducibility       │
+                         │ motif support         │
+                         │ reference recall      │
+                         └───────────┬───────────┘
+                                     │ score report
+                         ┌───────────▼───────────┐
+                         │ Durable run records   │
+                         │ + monitoring UI       │
+                         └───────────────────────┘
 ```
 
----
+The optimizer boundary is deliberate. Both search strategies call the same
+`evaluate_config()` function, use the same parameter bounds, and receive scores
+from the same objective implementation. This prevents optimizer-specific
+pipeline behavior from confounding the comparison.
 
-## Top-Level Directory Reference
+## Python package
 
-### `agent/`
-The optimizer layer. Contains both search strategies and their shared infrastructure.
+The installable package uses a `src/` layout under
+`src/agentic_pureclip/`.
 
-| File | Responsibility |
-|---|---|
-| `graph.py` | LangGraph state-machine for the LLM optimization loop. Calls DeepSeek to propose the next parameter set, executes `evaluate_config`, and loops until `MAX_ITER` is reached or proposals repeat. |
-| `optuna_runner.py` | Optuna/TPE-based optimizer using the same `evaluate_config` and objective. |
-| `evaluation.py` | Shared `evaluate_config()` — writes a config file, invokes the Snakemake pipeline, reads back `score_report.json`. Used by both optimizers. |
-| `decisions.py` | `composite_objective()` (the single source-of-truth scoring formula), prompt builder, and LLM response parser/validator. |
-| `state.py` | `AgentState` and `IterationRecord` Pydantic types for the LangGraph loop. |
-| `graph_mock.py` | Mock graph for testing without real PureCLIP or API calls. |
-| `logging_config.py` | Shared structured logger setup. |
-
-### `pipeline/`
-The configuration and data-model layer. Provides types and helpers consumed by both the optimizers and the workflow.
+### `loop/`: optimization strategies
 
 | File | Responsibility |
 |---|---|
-| `configs.py` | `DEFAULT_SEARCH_BOUNDS` (tunable parameter ranges), config load/save/validate, `tunable_snapshot`, `tried_signatures`. |
-| `datasets.py` | Dataset registry — maps dataset IDs to BAM paths, motif files, and benchmark references. Handles motif auto-resolution. |
-| `motifs.py` | TRANSFAC/PWM parser, IUPAC regex expansion, `scan_sequence_with_pwm()` for log-odds scoring. |
-| `runner.py` | Thin wrappers that shell out to `snakemake` and `run_scorers.py`. |
+| `graph.py` | LangGraph state machine for the LLM optimization loop. |
+| `optuna_runner.py` | Optuna TPE search over the shared parameter bounds. |
+| `evaluation.py` | Shared `evaluate_config()` implementation used by both optimizers. |
+| `state.py` | Iteration records and optimizer state types. |
+| `report.py` | Decision prompting, run reporting, and HTML report generation. |
+| `graph_mock.py` | Pipeline-independent mock graph used by tests. |
 
-### `workflow/`
-The bioinformatics execution layer, implemented as a Snakemake DAG.
-
-| File | Responsibility |
-|---|---|
-| `Snakefile` | Defines the full DAG: index BAMs → merge IP replicates → run PureCLIP on merged + per-replicate BAMs → postprocess → run scorers. Reads `run_config.yaml`; writes `score_report.json`. |
-| `postprocess.py` | Standardizes raw PureCLIP BED output to a fixed footprint width (~9 nt for these RBPs), merges nearby sites, and filters by minimum crosslink event count. |
-
-### `scorers/`
-Scoring logic that runs after each PureCLIP invocation.
+### `pipeline/`: shared configuration and execution support
 
 | File | Responsibility |
 |---|---|
-| `run_scorers.py` | Computes the three objective terms — **reproducibility** (chance-corrected replicate agreement), **motif hit-rate** (fraction of sites with a PWM hit, enriched over a dinucleotide-shuffled background), and **benchmark recall** (fraction of ENCODE reference regions recovered). Writes `score_report.json`. |
+| `configs.py` | Search bounds, configuration validation, tunable snapshots, and duplicate detection. |
+| `datasets.py` | Dataset registry and generation of dataset-specific run configurations. |
+| `motifs.py` | TRANSFAC parsing, PWM loading, IUPAC expansion, and sequence scanning. |
+| `runner.py` | BAM-index checks and Snakemake invocation. |
+| `logging_config.py` | Shared logging setup. |
 
-### `scripts/`
-Operational tooling for running experiments and managing data.
+### `postprocess/`: bioinformatics workflow
 
 | File | Responsibility |
 |---|---|
-| `overnight_batch.py` | Failure-tolerant batch runner. Executes a list of jobs from a YAML manifest within a wall-clock budget, never aborts on a single failure, records all outcomes to `results/overnight/`. |
-| `download_data.sh` / `download_genome.sh` | Download eCLIP BAMs from ENCODE and the GRCh38 genome FASTA. |
-| `setup_chr21_bams.sh` / `extract_chromosome.sh` | Subset BAMs to chr21 for fast iteration (`learn_on_chr21: true`). |
-| `write_dataset_config.py` | Helper to generate `config/datasets/*.yaml` entries. |
-| `list_motifs.py` / `reorganize_motifs.py` | Utilities for managing the motif file library under `data/motifs/`. |
-| `batch_runner.py` | Earlier batch runner prototype (superseded by `overnight_batch.py`). |
+| `Snakefile` | BAM indexing and merging, merged and per-replicate PureCLIP calls, post-processing, and scoring. |
+| `postprocess.py` | Region filtering, merging, summit centering, and fixed-width footprint generation. |
 
-### `dashboard/api/`
-FastAPI backend (uvicorn) that exposes a REST API over `results/` and `config/`.
-`main.py` defines the `/api/*` routes; `collectors.py` does the filesystem/process
-data collection. Data only — the UI is a separate service. Run from the repo root:
-`uv run uvicorn dashboard.api.main:app --port 8888`.
+The workflow consumes one YAML run configuration. It calls `pureclip2` on the
+merged IP signal and independently on each IP replicate, then standardizes the
+merged binding sites before scoring them.
 
-### `dashboard/ui/`
-React Router v8 single-page application providing the experiment dashboard.
+### `scoring/`: evaluation signals
+
+| File | Responsibility |
+|---|---|
+| `run_scorers.py` | Chance-corrected replicate agreement, PWM motif support, ENCODE benchmark recall, and score-report serialization. |
+| `objective.py` | Single source of truth for the weighted composite objective and few-site penalty. |
+
+The dashboard imports the same objective function rather than reimplementing the
+formula, so displayed scores and optimizer decisions use identical semantics.
+
+### `run/`: scheduling and CLI
+
+| File | Responsibility |
+|---|---|
+| `schedule.py` | Validates run requests and builds batch manifests. |
+| `launcher.py` | Writes manifests and launches the failure-tolerant batch runner. |
+| `cli.py` | Implements the `agentic-pureclip-run` command. |
+
+## One evaluation
+
+1. An optimizer proposes changes within the configured parameter bounds.
+2. `loop/evaluation.py` merges them into a run configuration.
+3. `pipeline/runner.py` invokes the Snakemake workflow.
+4. The workflow merges IP BAMs and runs PureCLIP on merged and replicate data.
+5. `postprocess/postprocess.py` produces standardized binding-site footprints.
+6. `scoring/run_scorers.py` writes the decomposed biological measurements.
+7. `scoring/objective.py` reduces those measurements to a scalar score.
+8. The iteration record becomes feedback for the next optimizer proposal.
+
+The default objective is:
+
+```text
+S = (0.50 × reproducibility + 0.25 × motif support + 0.25 × reference recall)
+    × min(1, number of binding sites / 10)
+```
+
+Weights are configurable and renormalized over present components. The final
+factor prevents a very small call set from winning through trivially high
+agreement or motif support.
+
+## Experiment and result records
+
+`config/` contains run templates, dataset definitions, search bounds, priors,
+and batch manifests. Generated results are written beneath `results/`, including
+iteration histories, job records, summaries, and per-run decision traces. Large
+inputs and outputs are ignored by Git; configurations and code are the committed
+description of an experiment.
+
+The batch runner in `scripts/run/overnight_batch.py` isolates failures and
+enforces a wall-clock budget so one failed evaluation does not discard an entire
+experimental batch.
+
+## Monitoring application
+
+The monitoring application has two components:
+
+- `dashboard/api/`: FastAPI endpoints that read configuration and result
+  artifacts and inspect project-owned host processes.
+- `dashboard/ui/`: React and TypeScript interface for run status, iteration
+  histories, experiment planning, and parameter explanations.
+
+The production Docker Compose deployment is monitor-only: results and
+configuration are mounted read-only, and runs are started on the host through
+the CLI. See [developer onboarding](developer-onboarding.md) for local and VM
+instructions.
+
+## Supporting directories
 
 | Path | Responsibility |
 |---|---|
-| `app/routes/dashboard.tsx` | Active run view: dataset info, current iteration/stage stepper, queue and ETA, results leaderboard with LLM-vs-Optuna head-to-head. |
-| `app/routes/runs.tsx` | Per-run decision trail: shows parameters changed and LLM reasoning at each iteration (sourced from `decisions.jsonl`). |
-| `app/routes/plan.tsx` | Run planner: pick dataset, set parameter ranges, submit a new job via `POST /api/schedule`. |
-| `app/routes/variables.tsx` | Plain-English guide to all tunable parameters and their effects. |
-| `app/lib/` | Shared API fetch helpers, type definitions. |
-
-Built with React 19, React Router 8, Tailwind CSS v4, and Vite. In dev the Vite proxy forwards `/api` to the `dashboard/api` backend; the production build (`npm run build`) produces `build/client/` served as a static SPA (its own container, or any static host).
-
-### `config/`
-Run configuration files — not code, but part of the reproducible experiment record.
-
-| Path | Responsibility |
-|---|---|
-| `run_config.yaml` | Template/active run config: dataset, sample BAM paths, PureCLIP params, postprocessing params, resource limits. |
-| `datasets/*.yaml` | Per-dataset configs (RBFOX2_K562, RBFOX2_HepG2, QKI_K562, QKI_HepG2, PUM1_K562, ENCORE_RBFOX2_K562). |
-| `priors.json` | LLM-facing priors: objective weights, known motifs, expected footprint width. |
-| `*_jobs.yaml` | Batch manifests consumed by `overnight_batch.py` (e.g., `bigrun2_jobs.yaml`). |
-
-### `tests/`
-Pytest suite covering the objective function, PWM scoring, LLM agent resilience (mocked), config validation, Optuna runner, and Snakemake workflow smoke tests.
-
-### `.github/workflows/`
-CI: `pytest.yml` runs the test suite on push/PR (`DEEPSEEK_API_KEY=dummy`).
-
----
-
-## Key Data Flows
-
-### Single optimization iteration
-1. Optimizer proposes a `dict` of tunable parameter changes.
-2. `evaluation.py` merges these into a copy of `run_config.yaml` and writes it to disk.
-3. Snakemake executes: merge BAMs → PureCLIP → postprocess → `run_scorers.py`.
-4. `run_scorers.py` writes `score_report.json` (reproducibility, motif, recall, site count, plus the params that produced them).
-5. `evaluation.py` reads the report back and returns it to the optimizer.
-6. `composite_objective()` in `decisions.py` computes the blended `[0,1]` score.
-
-### Composite objective formula
-```
-composite = (0.5·reproducibility + 0.25·motif + 0.25·recall)   # renormalised over present terms
-            × min(1, n_binding_sites / 10)                       # collapse guard
-```
-Weights are configurable via `priors.json`. The formula lives in `agentic_pureclip.scoring.objective` and is imported by the dashboard API (`dashboard/api/collectors.py`) so the dashboard always reflects the live objective.
-
-### Overnight batch
-`overnight_batch.py` iterates through a YAML manifest of jobs, launches each as a subprocess, enforces a wall-clock budget, and writes `iterations.jsonl`, `jobs.jsonl`, and `summary.csv` under `results/overnight/`.
-
-### Dashboard
-The FastAPI backend (`dashboard/api`) serves the API at `/api/*` by reading the JSONL/CSV files from `results/overnight/`. The React SPA (`dashboard/ui`) polls these endpoints and renders the live experiment state.
-
----
-
-## Technology Stack
-
-| Layer | Technology |
-|---|---|
-| Python runtime | Python ≥ 3.10, managed by **uv** |
-| LLM integration | LangGraph + LangChain OpenAI SDK → **DeepSeek** (`deepseek-chat`) |
-| Bayesian optimization | **Optuna** (TPE sampler) |
-| Bioinformatics workflow | **Snakemake** + `samtools` + `pureclip2` binary |
-| Data handling | pandas, PyYAML, Pydantic v2 |
-| Frontend | React 19, React Router 8, Tailwind CSS v4, Vite 8, TypeScript |
-| Backend API | Python stdlib `http.server` (no framework) |
-| Testing | pytest |
-| CI | GitHub Actions |
+| `config/` | Run, dataset, prior, and batch definitions. |
+| `scripts/data/` | Input and reference preparation. |
+| `scripts/motifs/` | Motif-catalog management. |
+| `scripts/run/` | Batch execution. |
+| `scripts/analysis/` | Report figures and frozen analysis inputs. |
+| `tests/` | Unit and workflow tests. |
+| `docs/report/` | Research manuscript and bibliography. |
+| `dashboard/` | Monitoring API, UI, proxy, and container definitions. |
