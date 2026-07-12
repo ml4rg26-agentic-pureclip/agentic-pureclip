@@ -156,8 +156,8 @@ def fig_pipeline(outdir: Path):
         (0.15, 1.15, 1.75, 0.9, "Optimizer", "LLM or Optuna", "#E8F1F5", "#176B87"),
         (2.35, 1.15, 1.75, 0.9, "Parameters", "7 bounded variables", "#F4F1E8", "#8A6D1D"),
         (4.55, 1.15, 1.75, 0.9, "PureCLIP pipeline", "merged + replicate calls", "#EDF3EA", "#477A3A"),
-        (6.75, 1.15, 1.75, 0.9, "Biological scoring", "reproducibility | motif | recall", "#F5EBF1", "#8B3E68"),
-        (8.95, 1.15, 1.5, 0.9, "Objective", "composite + yield guard", "#EFEFF2", "#4B5563"),
+        (6.75, 1.15, 1.75, 0.9, "Biological scoring", "reproducibility · motif\nreference recall", "#F5EBF1", "#8B3E68"),
+        (8.95, 1.15, 1.5, 0.9, "Objective", "composite score\n+ yield guard", "#EFEFF2", "#4B5563"),
     ]
     for x, y, w, h, heading, detail, fill, edge in boxes:
         ax.add_patch(FancyBboxPatch(
@@ -166,8 +166,9 @@ def fig_pipeline(outdir: Path):
         ))
         ax.text(x + w / 2, y + 0.59, heading, ha="center", va="center",
                 fontsize=9, weight="bold", color="#20252B")
-        ax.text(x + w / 2, y + 0.29, detail, ha="center", va="center",
-                fontsize=7.5, color="#38414A")
+        ax.text(x + w / 2, y + 0.27, detail, ha="center", va="center",
+                multialignment="center", linespacing=1.15, fontsize=7.2,
+                color="#38414A")
 
     for left, right in zip(boxes, boxes[1:]):
         start = (left[0] + left[2] + 0.05, 1.60)
