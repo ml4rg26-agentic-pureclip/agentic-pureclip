@@ -12,7 +12,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DATA_DIR="$REPO_ROOT/data"
 GENOME_DIR="$DATA_DIR/GRCh38.primary_assembly.genome.fa"
 GENOME_FA="$GENOME_DIR/GRCh38.primary_assembly.genome.fa"

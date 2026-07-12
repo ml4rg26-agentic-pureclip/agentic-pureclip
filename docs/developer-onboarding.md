@@ -1,16 +1,34 @@
 # Developer onboarding
 
-Practical setup for working on Agentic PureCLIP — local dev, how runs are
-launched, and how the dashboard is deployed. For the science and the day-to-day
-user commands, start with the [README](../README.md); for the internals, see
+This guide covers installation, repository structure, local execution, testing,
+dashboard development, and VM deployment. For the research question, study
+design, and findings, start with the [project README](../README.md). For a deeper
+description of internal data flow, see
 [`architecture-overview.md`](architecture-overview.md).
 
-## Prerequisites
+## Prerequisites and installation
 
-- **[uv](https://docs.astral.sh/uv/)** — Python toolchain (installs the project + deps).
-- **Node 20+ / npm** — for the dashboard UI (`dashboard/ui`).
-- **Docker + Docker Compose v2** — to run the dashboard stack (deployment only).
-- A **`DEEPSEEK_API_KEY`** in `.env` for LLM runs (Optuna needs none; tests accept a dummy).
+Core development requires:
+
+- **Python 3.10 or newer**.
+- **[uv](https://docs.astral.sh/uv/)** for the Python environment and package
+  installation. Snakemake and the Python dependencies are installed by `uv sync`.
+- **PureCLIP 2** with the `pureclip2` executable available on `PATH` for real
+  pipeline evaluations.
+- **samtools** for BAM merging and indexing.
+- **BEDTools** for interval operations, genomic shuffling, and sequence
+  extraction.
+
+Optional components require:
+
+- **Node.js 20 or newer and npm** for dashboard UI development.
+- **Docker and Docker Compose v2** for the containerized dashboard stack.
+- **TeX Live, latexmk, and biber** to build the research report; see the
+  [report-specific setup](report/ONBOARDING.md).
+- A **`DEEPSEEK_API_KEY`** for LLM optimization. TPE needs no API key, and tests
+  accept a dummy value.
+
+Create the Python environment from the repository root:
 
 ```bash
 uv sync
@@ -20,6 +38,92 @@ uv run python -m pytest tests/ -q
 
 `uv sync` installs `agentic_pureclip` editable, so the `python -m` entry points
 and the `agentic-pureclip-run` console script resolve without a `PYTHONPATH` hack.
+
+Before a real evaluation, verify the external executables:
+
+```bash
+pureclip2 --help
+samtools --version
+bedtools --version
+```
+
+## Data and reference preparation
+
+The pipeline expects pre-aligned, deduplicated eCLIP BAM files, a GRCh38 FASTA
+with its `.fai` index, ENCODE benchmark regions, and the motif PWM catalog. These
+large files are stored below `data/` and are not committed.
+
+```bash
+# Download the available eCLIP datasets and motif catalog.
+bash scripts/data/download_data.sh
+
+# Download the full reference, or add --chr21 for the small development reference.
+bash scripts/data/download_genome.sh --chr21
+```
+
+Dataset-specific paths and priors are recorded in `config/datasets/*.yaml`.
+Generate a configuration from the registry with:
+
+```bash
+uv run python scripts/data/write_dataset_config.py RBFOX2_K562 \
+  --out config/datasets/RBFOX2_K562.yaml
+```
+
+Do not commit downloaded BAMs, references, credentials, or generated results.
+
+## Repository structure
+
+| Path | Responsibility |
+|---|---|
+| `src/agentic_pureclip/loop/` | LLM and TPE optimization loops, shared evaluation state, prompts, and reports. |
+| `src/agentic_pureclip/scoring/` | Reproducibility, motif, and benchmark scoring plus the composite objective. |
+| `src/agentic_pureclip/postprocess/` | Snakemake workflow and binding-site footprint normalization. |
+| `src/agentic_pureclip/pipeline/` | Configuration, dataset and motif registries, bounds, and workflow execution helpers. |
+| `src/agentic_pureclip/run/` | CLI scheduling, manifest validation, and detached run launching. |
+| `config/` | Reproducible run, dataset, prior, and batch definitions. |
+| `scripts/data/` | Dataset and reference download/preparation utilities. |
+| `scripts/motifs/` | Motif-catalog inspection and reorganization utilities. |
+| `scripts/run/` | Batch execution and operational run tooling. |
+| `tests/` | Pytest suite mirroring the core Python modules and failure paths. |
+| `dashboard/api/` | FastAPI monitoring backend. |
+| `dashboard/ui/` | React and TypeScript dashboard. |
+| `docs/report/` | LaTeX research report, bibliography, figures, and build instructions. |
+| `docs/` | Architecture, investigation, deployment, presentation, and onboarding material. |
+
+The package uses a `src/` layout. Run commands from the repository root because
+the workflow resolves `config/`, `data/`, `results/`, and `scripts/` relative to
+the current directory.
+
+## Running an optimization
+
+For a short direct run, choose a dataset configuration and an optimizer:
+
+```bash
+# LLM agent
+CONFIG_PATH=config/run_config.yaml MAX_ITER=8 \
+  uv run python -m agentic_pureclip.loop.graph
+
+# TPE using the same evaluation and objective
+CONFIG_PATH=config/run_config.yaml MAX_ITER=12 \
+  uv run python -m agentic_pureclip.loop.optuna_runner
+```
+
+Set `learn_on_chr21: true` for development-scale chromosome-21 evaluations; a
+full-genome evaluation is substantially more expensive.
+
+For scheduled or failure-tolerant runs, use the project CLI:
+
+```bash
+uv run agentic-pureclip-run \
+  --dataset RBFOX2_K562 --optimizer llm \
+  --max-iter 8 --hours 4 --threads 32 --chr21 \
+  --weight reproducibility=0.5 --weight motif=0.25 --weight recall=0.25 \
+  --param pureclip.bandwidth_nt=20:100 \
+  --param postprocessing.force_width=3:15
+```
+
+Add `--dry-run` to validate and inspect the generated manifest without starting
+the workflow. Batch outputs accumulate under `results/overnight/`.
 
 ## How a run is launched
 
