@@ -89,60 +89,26 @@ only call sets with fewer than ten sites. \\
 \end{tabularx}
 \end{center}
 
-The following definitions specify the implementation. Let $C$ denote the final call set and
-$P_1,P_2$ the regions called independently in the two IP replicates. Raw
-agreement is the fraction of final sites supported by both replicates,
-\begin{equation}
-A_\mathrm{obs}=\frac{|\{c\in C:c\cap P_1\neq\varnothing
-\ \land\ c\cap P_2\neq\varnothing\}|}{|C|}.
-\end{equation}
-The same fraction is calculated for three chromosome-preserving random
-relocations of $C$, and their mean is $A_\mathrm{exp}$. Reproducibility is then
-\begin{equation}
-R_\mathrm{rep}=\max\!\left(0,\min\!\left(1,
-\frac{A_\mathrm{obs}-A_\mathrm{exp}}{1-A_\mathrm{exp}}\right)\right).
-\end{equation}
-This uses the chance-correction form introduced for Cohen's kappa
-\parencite{cohen1960}, but estimates expected overlap by genomic shuffling rather
-than from rater marginals; the score is set to zero if $A_\mathrm{exp}=1$.
-Interval intersections and shuffling are implemented
-with BEDTools~\parencite{quinlan2010}.
+The component calculations were chosen to remain biologically interpretable.
+Reproducibility is the fraction of final sites supported by both IP replicates,
+adjusted for the overlap observed after chromosome-preserving genomic shuffling.
+The adjustment follows the observed-versus-expected logic of Cohen's chance
+correction~\parencite{cohen1960}; interval operations and shuffling use
+BEDTools~\parencite{quinlan2010}.
 
-For a PWM $m$ of length $L$, a sequence starting at offset $k$ receives the
-standard log-odds score~\parencite{stormo1982}
-\begin{equation}
-q_m(k)=\sum_{i=1}^{L}\log_2\!\frac{\tilde p_{m,i}(x_{k+i-1})}{0.25},
-\qquad
-\tilde p_{m,i}(b)=\frac{p_{m,i}(b)+0.01}{1+4(0.01)}.
-\end{equation}
-For the minimum and maximum attainable PWM scores $q_m^-$ and $q_m^+$, the hit
-threshold and site-level hit fraction are
-\begin{equation}
-\tau_m=q_m^-+0.8(q_m^+-q_m^-),\qquad
-H_m=\frac{1}{|C|}\sum_{c\in C}
-\mathbf{1}\!\left[\max_{k\in W_c}q_m(k)\geq\tau_m\right],
-\end{equation}
-where $W_c$ is the $\pm15$-nt window around site $c$. At scoring time, the motif
-loader enumerates all five installed resources named in Section~\ref{theory}
-and evaluates every PWM available for the target RBP and cell line. Resource
-coverage is protein-dependent: HNRNPK has candidate motifs in all five resources,
-whereas PUM2 and U2AF2 have candidates in mCrossBase, ATtRACT, and RBPmap. The
-pipeline selects
-$m^*=\arg\max_m H_m/H_m^\mathrm{shuffle}$, and sets
-$R_\mathrm{motif}=H_{m^*}$. The enrichment ratio is reported but is not used in
-Equation~\ref{eq:composite}.
+Motif support is calculated in $\pm15$-nt site windows using standard PWM
+log-odds scoring~\parencite{stormo1982}. All target-RBP PWMs available from the
+five resources described in Section~\ref{theory} are considered. The pipeline
+uses the hit rate of the PWM with the strongest enrichment over shuffled
+sequences; the enrichment ratio is reported separately and is not itself part of
+Equation~\ref{eq:composite}. Reference recall is the fraction of strong ENCODE
+regions on chromosome~21 recovered by at least one final call
+\parencite{vannostrand2020}.
 
-Finally, for the chromosome-21 ENCODE reference set $G$,
-\begin{equation}
-R_\mathrm{ref}=\frac{|\{g\in G:\exists c\in C,\ g\cap c\neq\varnothing\}|}{|G|}.
-\end{equation}
-Thus, each reference interval is counted at most once, irrespective of how many
-calls overlap it. All three components are bounded by zero and one. The final
-factor in Equation~\ref{eq:composite} penalizes call sets with fewer than ten
-sites. Both the weights and this yield penalty are project-specific design
-choices. When a component is unavailable, the implementation renormalizes the
-weights over the remaining components; all records used here contained all
-three.
+All three components are bounded between zero and one. The weights and the
+few-site penalty in Equation~\ref{eq:composite} are project-specific design
+choices. If a component is unavailable, the implementation renormalizes the
+remaining weights; all records analyzed here contained all three components.
 
 \subsection{Experimental conditions}
 
