@@ -106,6 +106,19 @@ site count. These differences illustrate why the composite must be decomposed:
 similar aggregate scores can represent distinct biological and computational
 trade-offs.
 
+An exploratory inspection of decision traces compared the compact prompt with
+the more detailed development variant. In both cases, individual proposals were
+not always consistent with the reported score components. In particular, the
+model occasionally increased filtering stringency after evaluations with few
+retained sites and little motif support. Subsequent proposals sometimes returned
+to configurations with higher site yield. These observations concern the
+sequence of parameter proposals rather than the objective itself: low-yield call
+sets are down-weighted by the yield guard and may also have lower reference
+recall. No systematic difference between the two prompts was established. The
+target-gene information supplied by the detailed prompt was not evident in the
+rationales, although the optimization feedback contained no peak-to-gene
+annotations with which to evaluate or apply that information.
+
 \begin{table}[H]
 \centering
 \small
