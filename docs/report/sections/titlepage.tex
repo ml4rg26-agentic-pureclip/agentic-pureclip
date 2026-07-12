@@ -12,7 +12,7 @@
 
 \vspace*{0.5cm}
 \begin{center}
-		{\textbf{\Huge \ifthenelse{\boolean{english}}{Building an automated pipeline for PureCLIP parameter optimization}{-}}}\\[0.5cm]
+		{\textbf{\Huge \ifthenelse{\boolean{english}}{Automated optimization of PureCLIP parameters for eCLIP peak calling}{-}}}\\[0.5cm]
 		{\Large \ifthenelse{\boolean{english}}{Fadi Ferjani\textsuperscript{1}, Johannes Stephan\textsuperscript{1}, Paul Möhnen\textsuperscript{1},  Wen-Yen Kuo\textsuperscript{1}, Tobias Bernecker\textsuperscript{2}, Lambert Moyon\textsuperscript{2}}{-}}\\[0.5cm]
 		{\Large \ifthenelse{\boolean{english}}{\textsuperscript{1}Student at Technical University of Munich}{-}}\\
 		{\Large \ifthenelse{\boolean{english}}{\textsuperscript{2}Supervisor from Helmholtz Munich}{-}}\\[0.5cm]
@@ -21,24 +21,24 @@
 \end{center}
 \noindent % Prevents the first line from indenting if you want it flush left
 Enhanced crosslinking and immunoprecipitation (eCLIP) maps RNA-binding protein
-(RBP) contacts transcriptome-wide, but the biological quality of the resulting
-binding sites depends on a handful of PureCLIP peak-calling parameters for which
-no universal optimum exists, the best values vary with the RBP, cell line and
-experiment quality of each dataset, and manual tuning is slow, subjective and
-does not scale to the ENCODE collection. We present an automated
-propose\,$\rightarrow$\,run\,$\rightarrow$\,score\,$\rightarrow$\,iterate
-framework that tunes these parameters against a biologically grounded composite
-objective combining cross-replicate reproducibility, motif enrichment and
-recovery of reference regions, with a collapse guard that penalises degenerate
-few-site solutions. Two interchangeable optimizers, a large language model
-(LLM) agent supplied with biological priors and a Bayesian Tree-structured
-Parzen Estimator (TPE) search, share the \emph{identical} evaluation and
-objective, so the comparison isolates the proposal strategy rather than the
-pipeline. We benchmark them against a default-parameter baseline across ENCODE
-eCLIP datasets, an initial five-dataset comparison expanding to 26 datasets
-across 15 RBPs, spanning crisp, degenerate and positional RNA motifs, and
-ask whether LLM reasoning adds value over black-box optimization and whether
-that value depends on how hard the RBP's motif is.
+(RBP) contacts transcriptome-wide, but converting aligned reads into binding
+sites requires parameterised peak calling. We developed an automated framework
+that optimizes seven PureCLIP and post-processing parameters against a composite
+of replicate reproducibility, motif support, and reference-region recall. A
+large language model (LLM) agent and a Tree-structured Parzen Estimator (TPE)
+use the same pipeline, parameter bounds, and objective; a yield penalty excludes
+degenerate solutions containing fewer than ten sites. We evaluated the framework
+on chromosome~21 using three K562 datasets in a three-arm experiment (LLM with
+biological priors, LLM without priors, and TPE) and two supplementary pilot
+datasets. Optimization gains were dataset-dependent. On HNRNPK, the prior-equipped
+LLM improved the default composite score from 0.242 to 0.329, whereas the
+no-prior arm did not improve. The prior reduced performance on PUM2 and U2AF2.
+TPE achieved the highest observed score on the three main datasets, but unequal
+numbers of evaluations and an incomplete U2AF2 run prevent a controlled ranking
+of optimizers. These results establish a reproducible evaluation framework and
+provide preliminary evidence that biological context can alter LLM search
+behaviour; replicated, equal-budget experiments are required to determine when
+that context improves peak calling.
 
 
 %\include{titel}

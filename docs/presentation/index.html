@@ -296,44 +296,53 @@
         <section class="slide" data-speaker="2">
           <div class="slide-head">
             <span class="tag">How we judge "good"</span>
-            <h2>One quality score, three biological signals</h2>
+            <h2>Good calls agree, match biology, and recover known sites</h2>
           </div>
-          <div class="formula">
-            composite&nbsp;=&nbsp;<span class="w1"
-              >0.5&nbsp;·&nbsp;reproducibility</span
-            >&nbsp;+&nbsp;<span class="w2">0.25&nbsp;·&nbsp;motif</span
-            >&nbsp;+&nbsp;<span class="w3">0.25&nbsp;·&nbsp;recall</span>
+          <div class="score-mix">
+            composite = <span class="w1">50% reproducibility</span>
+            + <span class="w2">25% motif support</span>
+            + <span class="w3">25% reference recall</span>
           </div>
-          <div class="cols three">
-            <div class="col panel">
+          <div class="metric-ratios">
+            <div class="metric-ratio repro">
+              <div class="metric-weight">50%</div>
               <h3>Reproducibility</h3>
-              <p>
-                Do the two lab repeats agree on the sites? Real sites recur;
-                noise doesn't.
-              </p>
+              <div class="fraction">
+                <strong>sites supported by both replicates</strong>
+                <span>all final sites</span>
+              </div>
+              <p>Do both lab repeats support the same calls?</p>
             </div>
-            <div class="col panel">
-              <h3>Motif</h3>
-              <p>
-                Do sites contain the protein's preferred RNA "word"? A sign
-                they're genuine.
-              </p>
+            <div class="metric-ratio motif">
+              <div class="metric-weight">25%</div>
+              <h3>Motif support</h3>
+              <div class="fraction">
+                <strong>sites containing the RBP motif</strong>
+                <span>all final sites</span>
+              </div>
+              <p>Do the calls match the protein's sequence preference?</p>
             </div>
-            <div class="col panel">
-              <h3>Recall</h3>
-              <p>Do we recover the known reference binding regions?</p>
+            <div class="metric-ratio recall">
+              <div class="metric-weight">25%</div>
+              <h3>Reference recall</h3>
+              <div class="fraction">
+                <strong>known regions recovered</strong>
+                <span>all chr21 reference regions</span>
+              </div>
+              <p>How many strong known regions did we recover?</p>
             </div>
           </div>
-          <p class="footnote">
-            <b>Collapse guard:</b> the score is killed if the tool cheats by
-            reporting only a few "perfect" sites.
-          </p>
+          <div class="yield-guard">
+            <b>× min(1, sites / 10)</b>
+            <span>Fewer than 10 sites? Scale the score down — a handful of
+            “perfect” calls cannot win.</span>
+          </div>
           <aside class="notes">
             <b>Speaker 2 · ~0:50</b> — Both optimizers are judged by this same
-            number. Reproducibility weighted highest = strongest evidence of
-            real binding. Mention the collapse guard briefly: it stops a
-            degenerate "1 perfect site" solution from winning. Hand to Speaker
-            3.
+            number. Read the three fractions from left to right; the audience
+            should remember agreement, biological plausibility, and recovery.
+            Reproducibility carries half the score. The bottom guard stops a
+            degenerate “one perfect site” solution from winning. Hand to Speaker 3.
           </aside>
         </section>
 

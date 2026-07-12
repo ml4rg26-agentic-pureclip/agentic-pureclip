@@ -1,82 +1,41 @@
 \section{Introduction}
 \label{introduction}
 
-% ─────────────────────────────────────────────────────────────────────────
-% PLAIN-LANGUAGE GLOSSARY (comment only, not printed). Terms we must be able
-% to explain to our supervisors. Keep it simple.
-%   RBP (RNA-binding protein): a protein that sticks to RNA and controls it
-%       (e.g. which pieces get spliced, how long the RNA survives).
-%   eCLIP: a lab method that finds WHERE on the RNA a given RBP binds. Its raw
-%       output is short sequencing reads piled up along the genome.
-%   Peak caller: software that turns that noisy pile-up of reads into a clean
-%       list of real binding sites ("peaks").
-%   PureCLIP: the specific peak caller we use.
-%   Parameter: a numeric knob of PureCLIP (e.g. how much to smooth the signal).
-%       Different knob settings => very different binding-site lists.
-%   Motif: the short RNA "word" a protein prefers to bind (e.g. RBFOX2 likes
-%       UGCAUG). Crisp = clear/short; degenerate = fuzzy; positional = defined
-%       by location (e.g. next to a splice site) rather than by a fixed word.
-%   Reproducibility: do the two lab repeats (replicates) agree on the sites?
-%       Real sites recur in both; noise does not.
-%   Splicing factor: an RBP whose job is RNA splicing; these often have fuzzy
-%       or position-based motifs, so we use them as the "hard" test cases.
-%   Cell line (K562, HepG2): two standard human cell types the data comes from.
-% ─────────────────────────────────────────────────────────────────────────
+RNA-binding proteins (RBPs) regulate RNA splicing, stability, localization, and
+translation. Determining where these proteins contact RNA is therefore essential
+for studying post-transcriptional gene regulation. Enhanced crosslinking and
+immunoprecipitation (eCLIP) provides transcriptome-wide measurements of such
+contacts~\parencite{vannostrand2016}. However, the assay produces aligned
+sequencing reads rather than a definitive list of binding sites. Peak-calling
+software must distinguish genuine crosslink signal from experimental background,
+and the resulting calls determine the quality of downstream analyses.
 
+PureCLIP infers crosslink sites with a hidden Markov model and can incorporate a
+size-matched input control~\parencite{krakau2017}. Its output depends on parameters
+that control signal smoothing, site merging, and filtering. A parameter set that
+works well for one experiment may not transfer to another because RBPs differ in
+binding specificity and eCLIP libraries differ in depth, background, and antibody
+performance. Manual selection is consequently difficult to standardize and
+becomes impractical when each genome-wide evaluation requires substantial
+compute time.
 
-\begin{itemize}
-  \item RBPs drive post-transcriptional regulation; mapping their binding sites \emph{transcriptome-wide} is central to RNA biology. eCLIP yields per-nucleotide crosslink counts (aligned reads), not discrete sites, so a \emph{peak caller} is required as a post-processing step to turn this noisy read density into an interpretable binding-site set: its quality gates everything downstream.
-  \item PureCLIP's (such a \textit{peak caller}) output is highly sensitive to a few numeric parameters, and there is no universal optimum. The best values depend on RBP, cell line and experiment quality including antibody efficiency.
-  \item Manual tuning does not scale (hours per genome-wide run, subjective, dozens of ENCODE datasets), motivating an automated, reproducible framework.
-  \item Contribution: an automated \emph{propose $\rightarrow$ run $\rightarrow$ score $\rightarrow$ iterate} framework with two interchangeable optimizers on identical evaluation infrastructure: An LLM agent (biological priors + reasoning) vs.\ Optuna/TPE (black-box Bayesian search).
-  \item Scope: we test on \textbf{26 ENCODE datasets covering 15 proteins} from several RBP families and both cell lines (K562, HepG2), a deliberately diverse set chosen to check whether the method generalizes rather than overfitting a handful of proteins.
-  % Detail (for us / supervisors, not for the printed bullet): the 26 datasets =
-  % 5 original pilot datasets (proteins RBFOX2, QKI, PUM1) + 1 ENCORE RBFOX2 dataset
-  % + 20 new datasets added in 2026-07 (12 new proteins). "15 proteins" counts each
-  % protein once; some proteins appear in two cell lines (K562, HepG2), which is why
-  % there are more datasets than proteins.
-  \item Research question: does an automated LLM loop help us find good PureCLIP parameters, i.e.\ does it beat a standard automated search (Optuna) and the untuned defaults?
-  \item Why binding-site quality matters: many of these proteins are splicing factors, which are clinically important because faulty RNA splicing drives many cancers and neurological diseases, so accurate binding-site maps for them are what make robust automated tuning worthwhile.
-  % Status note (not printed): the LLM-vs-Optuna comparison on the 20 new datasets
-  % is still running; the final head-to-head numbers are reported in Results.
-\end{itemize}
+This work addresses that problem with an automated optimization loop. At each
+iteration, an optimizer proposes a parameter set, a shared workflow runs
+PureCLIP and post-processing, and the resulting sites are scored for replicate
+reproducibility, motif support, and recovery of ENCODE reference regions. We
+compare two proposal strategies: an LLM agent that receives decomposed feedback
+and RBP-specific biological context, and the Tree-structured Parzen Estimator
+(TPE) implemented in Optuna. Both strategies use the same evaluation code,
+search bounds, and composite objective. A second LLM condition withholds the
+biological context and thereby tests whether the prior changes search performance.
 
-% Goal: motivate WHY automated parameter optimization is needed.
-% Do not explain PureCLIP internals or the objective formula here.
-
-% ── 1. The biological question ─────────────────────────────────────────
-%   • RBPs control post-transcriptional gene regulation. Mapping their
-%     RNA binding sites at scale and with high precision is a central
-%     goal of modern RNA biology.
-%   • eCLIP produces genome-wide binding maps, but the raw output is
-%     aligned reads, a peak caller is required to convert these into
-%     a discrete set of binding sites.
-
-% ── 2. The parameter sensitivity problem ──────────────────────────────
-%   • PureCLIP's output is sensitive to a handful of numeric parameters.
-%     Small changes in bandwidth or merge distance can shift the number
-%     of called sites by orders of magnitude and substantially alter
-%     which genomic regions are recovered.
-%   • Crucially, no single parameter set is universally optimal: the
-%     best values depend on the RBP, cell line, and antibody efficiency
-%     of each individual dataset.
-
-% ── 3. Why manual tuning does not scale ───────────────────────────────
-%   • A single PureCLIP run on full-genome data takes hours; evaluating
-%     even a modest grid of parameter combinations is therefore
-%     impractical without automation.
-%   • Manual tuning is also subjective: different researchers apply
-%     different heuristics, making results hard to reproduce or compare
-%     across datasets and publications.
-%   • The ENCODE consortium provides dozens of eCLIP datasets; systematic
-%     per-dataset tuning requires an automated, reproducible framework.
-
-% ── 4. This project and research question ─────────────────────────────
-%   • We built an automated optimization framework that proposes parameter
-%     sets, runs the full pipeline, scores the result against biological
-%     quality signals, and iterates, replacing manual trial-and-error.
-%   • Two optimizer strategies are compared on identical evaluation
-%     infrastructure: an LLM agent (biological reasoning + priors) and
-%     Optuna/TPE (systematic Bayesian search).
-%   • Research question: for a small bioinformatics parameter space,
-%     does LLM reasoning add value over principled numerical optimization?
+The study asks three questions. First, does automated search improve on the
+default PureCLIP configuration? Second, does the LLM attain higher-quality call
+sets than TPE under the available experimental protocol? Third, does RBP-specific
+context benefit the LLM, and does that benefit vary with the sequence specificity
+of the RBP? The software registry contains 26 ENCODE datasets covering 15 RBPs in
+K562 and HepG2 cells. The empirical analysis reported here is narrower: three
+K562 datasets form the principal prior-ablation experiment, and two K562 datasets
+provide supplementary pilot observations. This distinction is maintained
+throughout the report to avoid drawing benchmark-wide conclusions from the
+completed subset.
