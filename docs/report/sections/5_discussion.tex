@@ -28,6 +28,17 @@ parameters changed together, and the objective provides no gradient that assigns
 an improvement to one change. Factorial follow-up experiments around selected
 LLM proposals would be required to test those explanations.
 
+The exploratory prompt comparison identifies a further methodological
+consideration. Although the model received the decomposed objective, some
+parameter proposals were not directionally consistent with those components.
+Providing more extensive instructions did not eliminate this behavior in the
+small set of inspected traces. Moreover, target-gene information could not be
+linked to the evaluated call sets because peak-to-gene annotations were absent
+from the feedback. These observations are insufficient to compare prompt
+variants, but they indicate that an LLM optimizer should be evaluated not only
+by its final score but also by the consistency of its proposals with the
+information available at each iteration.
+
 \subsection{Limitations of the comparison}
 
 The common pipeline and objective remove an important source of confounding, but
@@ -68,7 +79,11 @@ should include several RBPs in each pre-specified motif class.
 Methodologically, positional binders require a feature based on distance to
 annotated splice sites or branch points rather than a generic PWM score.
 Dinucleotide-preserving sequence backgrounds and a more robust reproducibility
-estimator would strengthen the remaining components. Finally, the best
-chromosome-21 configurations should be evaluated genome-wide on held-out data;
+estimator would strengthen the remaining components. A controlled prompt study
+could replay identical optimization histories under pre-specified prompt
+variants and quantify whether proposed parameter changes are consistent with the
+reported component scores. Peak-to-gene annotations would be required before
+target-gene priors could be evaluated. Finally, the best chromosome-21
+configurations should be evaluated genome-wide on held-out data;
 without this step, the optimized settings should not be interpreted as validated
 production parameters.

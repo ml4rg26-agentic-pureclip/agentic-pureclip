@@ -119,6 +119,14 @@ temperature\footnote{Sampling temperature $0.2$ via the DeepSeek API
 \parencite{deepseek2024} and received the RBP identity, known motifs, an expected
 footprint, the parameter
 bounds, the current configuration, and the decomposed score trajectory. The
+prompt specified the objective components and the penalty applied to call sets
+with fewer than ten sites. The model returned parameter changes as structured
+JSON together with a natural-language rationale. During workflow development, a
+second, more detailed prompt was tested on a small number of the same inputs. It
+included additional guidance for interpreting the score components and a list of
+putative target genes. This comparison was exploratory and was not included in
+the optimizer evaluation; the compact prompt was retained for the reported
+experiments. The
 \emph{LLM-without-prior} arm received the same bounds, metrics, and trajectory,
 but not the RBP identity or biological context. Thus, the ablation isolates the
 information supplied in the biological prior; it does not remove numerical
