@@ -122,8 +122,12 @@ threshold and site-level hit fraction are
 H_m=\frac{1}{|C|}\sum_{c\in C}
 \mathbf{1}\!\left[\max_{k\in W_c}q_m(k)\geq\tau_m\right],
 \end{equation}
-where $W_c$ is the $\pm15$-nt window around site $c$. The pipeline evaluates
-every available target PWM, selects
+where $W_c$ is the $\pm15$-nt window around site $c$. At scoring time, the motif
+loader enumerates all five installed resources named in Section~\ref{theory}
+and evaluates every PWM available for the target RBP and cell line. Resource
+coverage is protein-dependent: HNRNPK has candidate motifs in all five resources,
+whereas PUM2 and U2AF2 have candidates in mCrossBase, ATtRACT, and RBPmap. The
+pipeline selects
 $m^*=\arg\max_m H_m/H_m^\mathrm{shuffle}$, and sets
 $R_\mathrm{motif}=H_{m^*}$. The enrichment ratio is reported but is not used in
 Equation~\ref{eq:composite}.
