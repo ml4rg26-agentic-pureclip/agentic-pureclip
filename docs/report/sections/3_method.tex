@@ -3,20 +3,22 @@
 
 \subsection{Datasets and workflow}
 
-The repository contains a table-driven registry of 26 ENCODE eCLIP datasets
-covering 15 RBPs in K562 and HepG2 cells. Each entry specifies two deduplicated
-IP BAM files, an SMInput BAM file, a GRCh38 reference, benchmark regions, and
-RBP-specific motif information. The experiments analyzed in this report use
-PUM2, HNRNPK, U2AF2, QKI, and PUM1 in K562 cells. PureCLIP was restricted to
-chromosome~21 to make iterative evaluation tractable. Reference regions were
-restricted to the same chromosome before recall was calculated.
+The repository contains a table-driven registry of 26 ENCODE eCLIP
+datasets~\parencite{encode2012,vannostrand2020} covering 15 RBPs in K562 and HepG2
+cells. Each entry specifies two deduplicated IP BAM files, an SMInput BAM file, a
+GRCh38 reference, benchmark regions, and RBP-specific motif information. The
+experiments analyzed in this report use PUM2, HNRNPK, U2AF2, QKI, and PUM1 in K562
+cells. PureCLIP was restricted to chromosome~21 to make iterative evaluation
+tractable. Reference regions were restricted to the same chromosome before recall
+was calculated.
 
 Both optimizers call the same \texttt{evaluate\_config()} entry point
-(Figure~\ref{fig:pipeline}). The Snakemake workflow merges the IP replicates,
-runs PureCLIP on the merged BAM and separately on each replicate, converts raw
-calls into standardized footprints, and calculates the evaluation metrics. Each
-trial writes its parameters and scores to a self-contained
-\texttt{score\_report.json} file.
+(Figure~\ref{fig:pipeline}). The Snakemake workflow~\parencite{molder2021} merges
+the IP replicates, runs PureCLIP\footnote{PureCLIP~2.0.4, the \texttt{pureclip2}
+fork (\texttt{github.com/johan-stph/pureclip}).} on the merged BAM and separately
+on each replicate, converts raw calls into standardized footprints, and calculates
+the evaluation metrics. Each trial writes its parameters and scores to a
+self-contained \texttt{score\_report.json} file.
 
 \begin{figure}[H]
 \centering
@@ -120,8 +122,12 @@ threshold and site-level hit fraction are
 H_m=\frac{1}{|C|}\sum_{c\in C}
 \mathbf{1}\!\left[\max_{k\in W_c}q_m(k)\geq\tau_m\right],
 \end{equation}
-where $W_c$ is the $\pm15$-nt window around site $c$. The pipeline evaluates
-every available target PWM, selects
+where $W_c$ is the $\pm15$-nt window around site $c$. At scoring time, the motif
+loader enumerates all five installed resources named in Section~\ref{theory}
+and evaluates every PWM available for the target RBP and cell line. Resource
+coverage is protein-dependent: HNRNPK has candidate motifs in all five resources,
+whereas PUM2 and U2AF2 have candidates in mCrossBase, ATtRACT, and RBPmap. The
+pipeline selects
 $m^*=\arg\max_m H_m/H_m^\mathrm{shuffle}$, and sets
 $R_\mathrm{motif}=H_{m^*}$. The enrichment ratio is reported but is not used in
 Equation~\ref{eq:composite}.
@@ -141,7 +147,9 @@ three.
 \subsection{Experimental conditions}
 
 The principal experiment contains three arms for PUM2, HNRNPK, and U2AF2. The
-\emph{LLM-with-prior} arm used DeepSeek \texttt{deepseek-chat} at low temperature
+\emph{LLM-with-prior} arm used DeepSeek \texttt{deepseek-chat} at low
+temperature\footnote{Sampling temperature $0.2$ via the DeepSeek API
+(\texttt{api.deepseek.com/v1}).}
 \parencite{deepseek2024} and received the RBP identity, known motifs, an expected
 footprint, the parameter
 bounds, the current configuration, and the decomposed score trajectory. The
