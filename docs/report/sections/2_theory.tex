@@ -28,16 +28,16 @@ reproducibility} measures the fraction of merged calls supported by both IP
 replicates and corrects this fraction using chromosome-preserving shuffled
 intervals. \emph{Motif support} measures the fraction of site-centered windows
 containing a position-weight-matrix (PWM) match for the target RBP. The pipeline
-evaluates candidate PWMs from five motif resources and retains the hit rate of
-the motif with the largest enrichment over a mononucleotide-shuffled background.
-\emph{Reference recall} measures the fraction of strong ENCODE regions recovered
-by the call set. These quantities capture experimental consistency, sequence
+evaluates candidate PWMs from established motif resources~\parencite{feng2019,giudice2016,ray2013}
+and retains the hit rate of the motif with the largest enrichment over a
+mononucleotide-shuffled background. \emph{Reference recall} measures the fraction
+of strong ENCODE regions recovered by the call set~\parencite{vannostrand2020}. These quantities capture experimental consistency, sequence
 plausibility, and agreement with an external reference, respectively.
 
 The informativeness of motif support differs among RBPs. PUM2 has a relatively
-specific sequence motif, HNRNPK recognizes C-rich but more variable sequences,
-and U2AF2 binding is strongly associated with polypyrimidine tracts near splice
-sites. We refer to these cases as crisp, degenerate, and positional for the
+specific sequence motif~\parencite{galgano2008}, HNRNPK recognizes C-rich but more
+variable sequences~\parencite{thisted2001}, and U2AF2 binding is strongly associated
+with polypyrimidine tracts near splice sites~\parencite{sickmier2006}. We refer to these cases as crisp, degenerate, and positional for the
 purpose of the ablation design. These labels are qualitative study annotations,
 not outputs of the scoring pipeline.
 
