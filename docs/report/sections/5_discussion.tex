@@ -5,21 +5,29 @@
 
 The experiments support two conclusions. First, parameter optimization can
 materially improve PureCLIP call sets, but the magnitude of improvement depends
-on the dataset. PUM2 and HNRNPK benefited from search, whereas the default was
-already competitive for U2AF2 and PUM1. This variation supports the motivation
-for dataset-specific tuning, although the current sample is too small to identify
-which experimental properties predict a gain.
+on the dataset. Relative to the shared default, nine of 12 LLM runs and 11 of 12
+TPE runs found a higher score. Gains ranged from negligible
+changes to increases above 0.20. This variation supports dataset-specific tuning,
+although the current sample is too small to identify which experimental
+properties predict a gain.
 
-Second, biological context influenced LLM performance, but not uniformly. The
-positive HNRNPK ablation result is biologically plausible: C-rich motif and
-footprint information directed the agent toward sharper, more strongly supported
-calls. However, the same prior formulation reduced the best score on PUM2 and
-U2AF2. For U2AF2, sequence motifs are an incomplete description of binding because
-position relative to splice sites is central. More generally, one observation per
-motif class cannot distinguish a class effect from idiosyncrasies of a dataset or
-a stochastic LLM trajectory. The HNRNPK result should therefore be treated as a
-candidate mechanism for further testing, not as evidence that priors generally
-benefit proteins with degenerate motifs.
+Second, prior and no-prior LLM performance was broadly comparable. The mean
+difference gave the prior a slight edge of 0.004, but the median was $-0.002$:
+two datasets favored the prior, three favored no prior, and one was tied. The
+larger positive HNRNPK difference accounts for the small mean advantage, whereas
+the remaining differences were modest and mixed. This is consistent with a
+dataset-specific effect rather than a systematic benefit of biological context.
+For U2AF2, sequence motifs are also an incomplete description of binding because
+position relative to splice sites is central. With one trajectory per condition,
+protein-class effects cannot be separated from dataset idiosyncrasies or
+stochastic LLM behavior.
+
+TPE had the higher observed score in ten of 12 completed pairs. This is a
+consistent descriptive pattern across both cell lines. It is not, however,
+evidence of intrinsic optimizer superiority:
+the TPE trajectories usually contain roughly twice as many evaluations. A fair
+claim concerns the implemented protocol---TPE more often returned the higher
+best score under these stopping rules---rather than matched-budget efficiency.
 
 The study also shows why interpretability must be assessed carefully. The LLM
 produced readable rationales and adapted its proposals after unfavorable score
@@ -45,14 +53,16 @@ The common pipeline and objective remove an important source of confounding, but
 the computational budgets were not matched. LLM runs began at the default and
 typically stopped after five to nine evaluations. TPE began with sampled
 configurations, retained a ten-trial startup phase, and completed 14--16
-evaluations when time allowed. Wall-clock limits truncated two TPE runs. The
-observed best scores therefore compare available trajectories rather than equal
-search effort. Runtime, API cost, and the number of successful evaluations should
-all be fixed or reported in a definitive comparison.
+evaluations. The observed best scores therefore compare available trajectories
+rather than equal search effort. Runtime, API cost, and the number of successful
+evaluations should all be fixed or reported in a definitive comparison.
 
 The biological evaluation has further limitations. All experiments were
 restricted to chromosome~21 and were run once, so neither genome-wide transfer
-nor run-to-run variability was measured. The reproducibility background uses only
+nor run-to-run variability was measured. The analyzed subset represents eight of
+15 RBPs in the registry and was determined by available completed runs rather
+than random or stratified sampling. The registry demonstrates pipeline scope,
+not benchmark-wide performance. The reproducibility background uses only
 three shuffled interval sets. Mononucleotide shuffling controls base composition
 but not dinucleotide structure. ENCODE reference regions are outputs of another
 analysis pipeline rather than experimentally verified ground truth. Finally, the
@@ -69,8 +79,8 @@ protein-appropriate evidence.
 
 \subsection{Future work}
 
-The immediate priority is a replicated, equal-budget comparison on the expanded
-dataset registry. Each optimizer should receive the same number of successful
+The immediate priority is a replicated, equal-budget comparison that extends to
+more of the dataset registry. Each optimizer should receive the same number of successful
 pipeline evaluations, with multiple TPE seeds and multiple LLM sampling seeds.
 Reporting best-score trajectories against both evaluation count and wall-clock
 time would separate sample efficiency from computational cost. The prior ablation

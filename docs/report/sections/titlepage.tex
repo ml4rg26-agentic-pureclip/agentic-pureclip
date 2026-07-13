@@ -28,17 +28,18 @@ of replicate reproducibility, motif support, and reference-region recall. A
 large language model (LLM) agent and a Tree-structured Parzen Estimator (TPE)
 use the same pipeline, parameter bounds, and objective; a yield penalty excludes
 degenerate solutions containing fewer than ten sites. We evaluated the framework
-on chromosome~21 using three K562 datasets in a three-arm experiment (LLM with
-biological priors, LLM without priors, and TPE) and two supplementary pilot
-datasets. Optimization gains were dataset-dependent. On HNRNPK, the prior-equipped
-LLM improved the default composite score from 0.242 to 0.329, whereas the
-no-prior arm did not improve. The prior reduced performance on PUM2 and U2AF2.
-TPE achieved the highest observed score on the three main datasets, but unequal
-numbers of evaluations and an incomplete U2AF2 run prevent a controlled ranking
-of optimizers. These results establish a reproducible evaluation framework and
-provide preliminary evidence that biological context can alter LLM search
-behavior; replicated, equal-budget experiments are required to determine when
-that context improves peak calling.
+on chromosome~21 in 12 completed paired LLM--TPE dataset/cell-line comparisons
+across K562 and HepG2, with six additional K562 prior ablations. TPE produced the
+higher observed best score in ten pairs. However, TPE runs used 14--16
+evaluations and LLM runs only five to seven, precluding a controlled efficiency
+ranking. Prior and no-prior LLM outcomes were nearly even overall: the mean
+prior advantage was 0.004 and the median difference was $-0.002$, with modest
+dataset-specific variation except for HNRNPK. The proposed monotonic relation
+between motif difficulty and prior benefit was not observed. These results establish a
+reproducible evaluation framework and an empirical baseline for a subset of the
+larger dataset registry; replicated, equal-budget experiments are required to
+compare optimizers and determine when
+biological context improves peak calling.
 
 
 %\include{titel}

@@ -7,10 +7,14 @@ The repository contains a table-driven registry of 26 ENCODE eCLIP
 datasets~\parencite{encode2012,vannostrand2020} covering 15 RBPs in K562 and HepG2
 cells. Each entry specifies two deduplicated IP BAM files, an SMInput BAM file, a
 GRCh38 reference, benchmark regions, and RBP-specific motif information. The
-experiments analyzed in this report use PUM2, HNRNPK, U2AF2, QKI, and PUM1 in K562
-cells. PureCLIP was restricted to chromosome~21 to make iterative evaluation
-tractable. Reference regions were restricted to the same chromosome before recall
-was calculated.
+completed head-to-head subset uses QKI, PUM1, PUM2, HNRNPK, SRSF1, U2AF2, and
+SF3B4 in K562, and RBFOX2, HNRNPK, SRSF1, U2AF2, and SF3B4 in HepG2. These 12
+pairs represent eight of the 15 registered RBPs. The prior ablation covers QKI,
+PUM2, HNRNPK, SRSF1, U2AF2, and SF3B4 in K562. The same table-driven workflow can
+run the remaining registered datasets, but they are outside the empirical subset
+reported here. PureCLIP was restricted to chromosome~21 to make iterative
+evaluation tractable. Reference regions were restricted to the same chromosome
+before recall was calculated.
 
 Both optimizers call the same \texttt{evaluate\_config()} entry point
 (Figure~\ref{fig:pipeline}). The Snakemake workflow~\parencite{molder2021} merges
@@ -23,9 +27,9 @@ self-contained \texttt{score\_report.json} file.
 \begin{figure}[H]
 \centering
 \includegraphics[width=\linewidth]{images/pipeline_overview.png}
-\caption{Shared optimization workflow. The LLM and TPE differ only in how they
-propose parameters. All candidates are evaluated by the same PureCLIP,
-post-processing, and scoring implementation.}
+\caption{Matched evaluation with different proposal loops. The LLM receives
+RBP context and decomposed measurements; TPE observes the scalar objective. All
+candidates pass through the same PureCLIP, post-processing, and scoring code.}
 \label{fig:pipeline}
 \end{figure}
 
@@ -112,8 +116,7 @@ remaining weights; all records analyzed here contained all three components.
 
 \subsection{Experimental conditions}
 
-The principal experiment contains three arms for PUM2, HNRNPK, and U2AF2. The
-\emph{LLM-with-prior} arm used DeepSeek \texttt{deepseek-chat} at low
+The \emph{LLM-with-prior} arm used DeepSeek \texttt{deepseek-chat} at low
 temperature\footnote{Sampling temperature $0.2$ via the DeepSeek API
 (\texttt{api.deepseek.com/v1}).}
 \parencite{deepseek2024} and received the RBP identity, known motifs, an expected
@@ -137,9 +140,9 @@ observed the scalar composite score.
 All arms had a nominal cap of 16 evaluations and a stagnation threshold of 0.01
 for four successive evaluations. For the LLM, counting began immediately. For
 TPE, it began after the ten startup trials used by the sampler. Consequently,
-the rule did not produce equal evaluation counts: completed LLM runs used five
-to nine evaluations, whereas completed TPE runs used 14 to 16. The U2AF2 TPE run
-was terminated by the batch time limit after two evaluations. QKI and PUM1 were
-earlier pilot experiments under the same objective; the PUM1 TPE run also ended
-at the batch time limit. All analyses are descriptive because each arm was run
-once and no estimate of between-run variability is available.
+the rule did not produce equal evaluation counts: LLM runs used five to nine
+evaluations, whereas TPE runs used 14 to 16. LLM iteration~0 evaluated the shared
+default configuration; TPE began with a sampled candidate. The reported
+head-to-head cohort includes only dataset--cell-line pairs for which both arms
+completed normally. All analyses are descriptive because each included arm was
+run once and no estimate of between-run variability is available.

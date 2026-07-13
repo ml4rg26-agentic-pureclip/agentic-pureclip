@@ -7,12 +7,12 @@ same bounded search space, workflow, composite objective, and durable result
 records. The framework thereby supports auditable comparisons while protecting
 against degenerate few-site solutions.
 
-In the completed chromosome-21 experiments, optimization gains varied by dataset.
-Biological context improved the LLM result for HNRNPK but not for PUM2 or U2AF2,
-and the predicted monotonic relationship between motif difficulty and prior
-benefit was not observed. TPE produced higher best scores in the principal
-datasets, but unequal evaluation counts and one incomplete run preclude a fair
-optimizer ranking. The main outcome is therefore methodological rather than a
-claim of LLM superiority: the study establishes a reproducible test bed and
-identifies the controls needed for a conclusive comparison. Equal-budget,
-replicated, and genome-wide evaluation is the next step.
+Across 12 completed chromosome-21 dataset--cell-line pairs, automated search
+usually improved the shared default. TPE produced the higher observed best score
+in ten pairs. Because TPE usually
+received roughly twice as many evaluations, this is a result of the implemented
+protocol rather than a fair ranking of optimizer efficiency. Biological context
+gave the prior only a slight mean edge of 0.004, while the median difference was
+$-0.002$ and the direction varied by dataset. The predicted monotonic relationship
+between motif difficulty and prior benefit was not observed. The main outcome is therefore a
+reproducible test bed and a subset-level empirical baseline.

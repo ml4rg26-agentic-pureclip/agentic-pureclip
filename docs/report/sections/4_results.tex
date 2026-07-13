@@ -1,123 +1,87 @@
 \section{Results}
 \label{results}
 
-The principal comparison comprises nine optimizer--dataset combinations across
-PUM2, HNRNPK, and U2AF2. Eight completed normally; U2AF2 TPE ended after two
-evaluations because the batch reached its time limit. QKI and PUM1 are reported
-separately as pilots. Every value is the best composite score observed in one
-chromosome-21 run and should be interpreted as a point estimate.
+The analysis provides 12 completed dataset--cell-line comparisons between the
+prior-equipped LLM and TPE: seven in K562 and five in HepG2. Every reported value
+is the best chromosome-21 composite observed in one run and is therefore a point
+estimate. The cohort is a subset of the 26-dataset software registry, not an
+exhaustive survey of the RBPs that the pipeline can process.
 
-\subsection{Optimization gains depended on the dataset}
+\subsection{Automated search usually improved the shared default}
 
-Table~\ref{tab:h2h} compares each search with the shared default configuration.
-For PUM2, all three searches improved the default score of 0.260, with gains from
-0.092 to 0.124. HNRNPK also improved under the prior-equipped LLM ($+0.087$) and
-TPE ($+0.133$), while the no-prior LLM returned to the default as its best
-configuration. In contrast, the prior-equipped LLM did not improve the U2AF2
-default. The no-prior arm improved it by 0.037. The incomplete TPE run found a
-score of 0.488 in its second evaluation, but it cannot be treated as a converged
-result.
-
-The pilots show the same dataset dependence. On QKI, the LLM arms improved the
-default by 0.029--0.039, whereas TPE improved it by only 0.001. Neither completed
-search improved the PUM1 default; the reported TPE value is additionally affected
-by the yield penalty because its best trial contained seven sites.
-
-\begin{table}[H]
-\centering
-\small
-\begin{tabular}{@{}llcccc@{}}
-\toprule
-Dataset & Motif class & Default & LLM prior & LLM no prior & TPE \\
-\midrule
-\multicolumn{6}{@{}l}{\emph{Principal three-arm experiment}}\\
-PUM2   & crisp      & 0.260 & 0.352 (7) & 0.383 (9) & 0.371 (14) \\
-HNRNPK & degenerate & 0.242 & 0.329 (7) & 0.242 (5) & 0.375 (16) \\
-U2AF2  & positional & 0.423 & 0.423 (5) & 0.460 (6) & 0.488 (2)\textsuperscript{\dag} \\
-\midrule
-\multicolumn{6}{@{}l}{\emph{Supplementary pilots}}\\
-QKI    & crisp      & 0.293 & 0.332 (6) & 0.322 (6) & 0.294 (14) \\
-PUM1   & crisp      & 0.364 & 0.364 (5) & --- & 0.325 (6)\textsuperscript{\dag} \\
-\bottomrule
-\end{tabular}
-\caption{Best composite score by dataset and optimizer. Parentheses give the
-number of evaluated configurations, including the default for LLM runs.
-\textsuperscript{\dag}The run ended at the batch time limit and is incomplete.}
-\label{tab:h2h}
-\end{table}
-
-\subsection{The prior ablation did not follow a monotonic difficulty trend}
-
-The difference between the two LLM arms was $-0.031$ for PUM2, $+0.087$ for
-HNRNPK, and $-0.037$ for U2AF2. Thus, the biological prior was associated with a
-higher score only for HNRNPK. This pattern does not support the proposed monotonic
-relationship in which prior benefit increases from crisp to degenerate to
-positional binding. It is instead consistent with a dataset-specific effect, but
-one dataset per motif class is insufficient to establish a class-level
-relationship.
-
-Figure~\ref{fig:convergence} shows that the HNRNPK difference emerged within two
-LLM updates. The no-prior arm explored four alternatives without exceeding the
-default, whereas the prior-equipped arm reached 0.329. PUM2 shows the opposite
-pattern: the no-prior LLM achieved the highest score among the three arms. For
-U2AF2, the prior-equipped LLM retained the default while the no-prior arm improved
-after changing merge distance and minimum crosslink support.
+The fixed default was evaluated as iteration~0 of each LLM run. Among the 12
+prior-equipped LLM arms, optimization improved this baseline in nine and tied it
+in three. Among the 12 TPE arms, the best sampled configuration exceeded the
+corresponding default in 11; SF3B4 HepG2 was lower by 0.006. The largest
+default-to-best gains were 0.220 for RBFOX2 HepG2 TPE and 0.151 for U2AF2 K562
+TPE. These observations support dataset-specific tuning, although they do not
+separate optimizer effects from evaluation budget.
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=\linewidth]{images/convergence_ablation.png}
-\caption{Best observed composite score by evaluation in the principal
-experiment. Horizontal lines mark the shared default configuration. The unequal
-curve lengths reflect algorithm-specific stopping and, for U2AF2 TPE, the batch
-time limit.}
-\label{fig:convergence}
+\includegraphics[width=\linewidth]{images/benchmark_summary.png}
+\caption{Best observed composite scores for the 12 completed paired LLM--TPE
+runs. Lines join arms evaluated on the same dataset and cell line. Evaluation
+counts were unequal, so the displayed win counts summarize outcomes rather than
+controlled optimizer performance.}
+\label{fig:benchmark}
 \end{figure}
 
-\subsection{The available protocol does not identify a superior optimizer}
+\subsection{TPE had the higher observed score in most pairs}
 
-TPE exceeded the prior-equipped LLM by 0.019 on PUM2 and 0.046 on HNRNPK. It
-also produced the highest observed U2AF2 score, although that run was incomplete.
-Conversely, the prior-equipped LLM exceeded TPE by 0.038 in the completed QKI
-pilot. The PUM1 comparison is not interpretable because the TPE run timed out and
-its best trial fell below the ten-site threshold.
+TPE produced the higher point estimate in six of seven K562 pairs and four of
+five HepG2 pairs. The prior-equipped LLM was higher for QKI K562 (0.328 versus
+0.294) and SF3B4 HepG2 (0.460 versus 0.454). Across all 12 pairs, TPE was higher
+in ten. The largest head-to-head gaps
+favored TPE for RBFOX2 HepG2 ($+0.189$), HNRNPK HepG2 ($+0.135$), U2AF2 HepG2
+($+0.125$), and U2AF2 K562 ($+0.124$).
 
-These differences do not constitute a controlled ranking. Completed TPE runs
-evaluated approximately twice as many configurations as the LLM runs, and two
-TPE runs were truncated by wall-clock limits. The results demonstrate that both
-strategies can locate improvements, but an equal-budget replicated experiment is
-needed to compare their efficiency and final performance.
+This pattern is stronger than in the earlier partial batch, but it still does
+not identify a superior optimizer under matched conditions. Completed TPE runs
+used 14--16 evaluations, whereas LLM runs used five to seven in the head-to-head
+cohort. TPE also had ten startup samples before its stagnation rule applied. The
+comparison therefore measures the best result under the implemented stopping
+rules, not equal-budget sample efficiency.
+
+\subsection{Prior and no-prior outcomes were similar overall}
+
+Six K562 datasets have both LLM conditions (Figure~\ref{fig:prior}). Across these
+runs, the mean prior-minus-no-prior difference was $+0.004$ and the median was
+$-0.002$. The two conditions were therefore nearly even in aggregate, with only
+a slight mean edge for the prior that was driven by HNRNPK ($+0.087$). The other
+differences were smaller and mixed: QKI $+0.009$, PUM2 $-0.031$, U2AF2 $-0.037$,
+SRSF1 $-0.004$, and SF3B4 $0.000$. For the pre-specified
+crisp--degenerate--positional gradient, the directions did not form a monotonic
+trend. These single-run ablations support a dataset-specific interpretation but
+do not establish a general prior advantage or a class-level effect.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.84\linewidth]{images/prior_ablation.png}
+\caption{Difference between the best prior and no-prior LLM scores in six K562
+datasets. The aggregate difference is close to zero; positive values favor the
+prior-equipped arm. Each point compares one trajectory per condition and has no
+uncertainty estimate.}
+\label{fig:prior}
+\end{figure}
 
 \subsection{Metric decomposition and decision trace}
 
+The best configurations reached similar composite values through different
+component profiles (Table~\ref{tab:bio}). U2AF2 K562 TPE combined high reference
+recall with 180 sites, whereas QKI K562 LLM obtained stronger motif enrichment
+but low reference recall and only 19 sites. RBFOX2 HepG2 TPE produced the largest
+selected call set and recovered 90\% of the reference regions. The aggregate
+score should therefore be read together with its components.
+
 The best HNRNPK LLM configuration increased replicate reproducibility from 0.273
 to 0.435 and motif hit rate from 0.273 to 0.348, while reference recall decreased
-from 0.15 to 0.10 (Table~\ref{tab:bio}). Its first proposal invoked HNRNPK's
-C-rich motif to reduce bandwidth from 50 to 30 nt and simultaneously increased
-merge distance. That combined proposal initially lowered the composite score.
-The following proposal retained the narrower bandwidth, restored the merge
-distance, and increased the minimum crosslink count; this configuration achieved
-the reported maximum. The trace therefore shows that the prior changed the
-agent's search rationale, but it does not isolate bandwidth as the causal source
-of improvement.
-
-Across the representative best trials, motif enrichment was highest for PUM2 and
-lowest for U2AF2. U2AF2 instead exhibited high reference recall and a much larger
-site count. These differences illustrate why the composite must be decomposed:
-similar aggregate scores can represent distinct biological and computational
-trade-offs.
-
-An exploratory inspection of decision traces compared the compact prompt with
-the more detailed development variant. In both cases, individual proposals were
-not always consistent with the reported score components. In particular, the
-model occasionally increased filtering stringency after evaluations with few
-retained sites and little motif support. Subsequent proposals sometimes returned
-to configurations with higher site yield. These observations concern the
-sequence of parameter proposals rather than the objective itself: low-yield call
-sets are down-weighted by the yield guard and may also have lower reference
-recall. No systematic difference between the two prompts was established. The
-target-gene information supplied by the detailed prompt was not evident in the
-rationales, although the optimization feedback contained no peak-to-gene
-annotations with which to evaluate or apply that information.
+from 0.15 to 0.10. Its first proposal invoked HNRNPK's C-rich motif to reduce
+bandwidth and simultaneously increased merge distance; that proposal lowered
+the score. The next proposal retained the narrower bandwidth, restored merge
+distance, and increased the minimum crosslink count, reaching 0.329. The trace
+shows that the prior influenced the rationale, but simultaneous parameter
+changes prevent a causal attribution.
 
 \begin{table}[H]
 \centering
@@ -126,15 +90,22 @@ annotations with which to evaluate or apply that information.
 \toprule
 Dataset & Arm & Repro. & Motif hit (enr.) & Recall & Sites & Composite \\
 \midrule
-PUM2   & LLM prior    & 0.368 & 0.421 ($16.0\times$) & 0.25 & 38  & 0.352 \\
-HNRNPK & LLM prior    & 0.435 & 0.348 ($8.0\times$)  & 0.10 & 23  & 0.329 \\
-HNRNPK & TPE          & 0.583 & 0.333 ($4.0\times$)  & 0.00 & 12  & 0.375 \\
-U2AF2  & LLM no prior & 0.387 & 0.268 ($3.5\times$)  & 0.80 & 414 & 0.460 \\
-QKI    & LLM prior    & 0.364 & 0.500 ($11.0\times$) & 0.10 & 22  & 0.332 \\
+PUM2 K562   & LLM prior & 0.368 & 0.421 ($16.0\times$) & 0.25 & 38  & 0.352 \\
+HNRNPK K562 & LLM prior & 0.435 & 0.348 ($8.0\times$)  & 0.10 & 23  & 0.329 \\
+QKI K562    & LLM prior & 0.421 & 0.368 ($7.0\times$)  & 0.10 & 19  & 0.328 \\
+U2AF2 K562  & TPE       & 0.461 & 0.517 ($2.9\times$)  & 0.75 & 180 & 0.547 \\
+RBFOX2 HepG2& TPE       & 0.469 & 0.163 ($3.5\times$)  & 0.90 & 644 & 0.500 \\
 \bottomrule
 \end{tabular}
-\caption{Components of selected best-scoring trials. Motif enrichment (enr.)
-is calculated relative to the mononucleotide-shuffled background and is not a
-term in Equation~\ref{eq:composite}; the corresponding motif hit rate is.}
+\caption{Components of selected best-scoring trials. Motif enrichment (enr.) is
+relative to the mononucleotide-shuffled background and is not itself a term in
+Equation~\ref{eq:composite}; the corresponding hit rate is.}
 \label{tab:bio}
 \end{table}
+
+An exploratory inspection of development traces found that readable LLM
+rationales were not always directionally consistent with the score components.
+Additional prompt detail did not remove this behavior in the small inspected
+sample, and target-gene information could not be evaluated because the feedback
+contained no peak-to-gene annotations. These observations motivate a controlled
+prompt study but do not support a comparison between prompt variants.
