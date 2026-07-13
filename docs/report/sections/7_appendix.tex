@@ -4,12 +4,13 @@
 \subsection{ENCODE accessions}
 
 Table~\ref{tab:accessions} lists the two IP replicates and SMInput control for the
-five datasets reported in Section~\ref{results}. The inputs are deduplicated,
+12 dataset--cell-line pairs reported in Section~\ref{results}. The inputs are deduplicated,
 GRCh38-aligned BAM files released by ENCODE.
 
 \begin{table}[H]
 \centering
-\small
+\scriptsize
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{@{}llll@{}}
 \toprule
 Dataset & IP replicate 1 & IP replicate 2 & SMInput \\
@@ -18,7 +19,14 @@ QKI\_K562    & ENCFF698BKX & ENCFF012WMS & ENCFF070RME \\
 PUM1\_K562   & ENCFF064COB & ENCFF583QFB & ENCFF222HEX \\
 PUM2\_K562   & ENCFF231WHF & ENCFF732EQX & ENCFF786ZZB \\
 HNRNPK\_K562 & ENCFF894NKS & ENCFF405ESF & ENCFF399CEH \\
+SRSF1\_K562  & ENCFF595NHE & ENCFF369EUU & ENCFF241WHP \\
 U2AF2\_K562  & ENCFF835KXL & ENCFF936JSP & ENCFF227TON \\
+SF3B4\_K562  & ENCFF095KWC & ENCFF173BOO & ENCFF735PKL \\
+RBFOX2\_HepG2& ENCFF239CML & ENCFF170YQV & ENCFF515BTB \\
+HNRNPK\_HepG2& ENCFF198ISB & ENCFF553XCL & ENCFF019JFZ \\
+SRSF1\_HepG2 & ENCFF867TIG & ENCFF418ZXO & ENCFF467FPH \\
+U2AF2\_HepG2 & ENCFF358STL & ENCFF033XVX & ENCFF825YLL \\
+SF3B4\_HepG2 & ENCFF040BYE & ENCFF483VLR & ENCFF072CLZ \\
 \bottomrule
 \end{tabular}
 \caption{ENCODE accessions for the experiments included in the report.}
@@ -33,6 +41,7 @@ configuration and decomposed measurements in \texttt{score\_report.json}; the
 batch runner aggregates these records in
 \path{results/overnight/iterations.jsonl}. A committed snapshot at
 \path{scripts/analysis/iterations_snapshot.jsonl} reproduces the reported
-figures with \path{scripts/analysis/report_figures.py}. The HNRNPK decision
-trace discussed in Section~\ref{results} was verified against the corresponding
-runner log.
+figures with \path{scripts/analysis/report_figures.py}. The snapshot preserves
+the append-only runner history; the figure script keeps the newest record for
+retried job iterations. The HNRNPK decision trace discussed in
+Section~\ref{results} was verified against the corresponding runner log.

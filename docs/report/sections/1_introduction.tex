@@ -34,8 +34,9 @@ default PureCLIP configuration? Second, does the LLM attain higher-quality call
 sets than TPE under the available experimental protocol? Third, does RBP-specific
 context benefit the LLM, and does that benefit vary with the sequence specificity
 of the RBP? The software registry contains 26 ENCODE datasets covering 15 RBPs in
-K562 and HepG2 cells. The empirical analysis reported here is narrower: three
-K562 datasets form the principal prior-ablation experiment, and two K562 datasets
-provide supplementary pilot observations. This distinction is maintained
-throughout the report to avoid drawing benchmark-wide conclusions from the
-completed subset.
+K562 and HepG2 cells. The analysis reported here uses a completed paired subset:
+seven K562 and five HepG2 dataset--cell-line pairs representing eight RBPs. Six
+K562 datasets also have an LLM-without-prior arm. The registry permits the same
+pipeline to be run on additional proteins without changing the evaluation code,
+but those datasets were not part of the available completed cohort. Conclusions
+therefore concern this subset rather than the full registry.

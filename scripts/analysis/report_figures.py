@@ -1,25 +1,14 @@
-"""Generate the figures used in docs/report from an iterations.jsonl snapshot.
+"""Generate the figures used in ``docs/report`` from an iteration snapshot.
 
-Reads the aggregated per-iteration record written by scripts/run/overnight_batch.py
-(results/overnight/iterations.jsonl on the runner) and writes publication figures into
-docs/report/images:
-
-  convergence_ablation.png  best-so-far composite vs. iteration for the three
-                            K562 ablation-gradient datasets (PUM2 / HNRNPK /
-                            U2AF2), one panel each, LLM-prior vs. LLM-no-prior
-                            vs. Optuna, with the default-parameter baseline.
-  deltas_by_tier.png        prior-benefit (LLM_prior - LLM_noprior) and
-                            head-to-head (LLM_prior - Optuna) deltas by motif
-                            difficulty tier.
-  pipeline_overview.png     overview of the shared evaluation loop.
+The runner appends records when jobs are retried.  Loading therefore keeps the
+newest record for each ``(job_id, iteration)`` pair before calculating a best
+score.  This makes the committed snapshot reproduce the final batch state
+without counting superseded attempts twice.
 
 Usage:
     uv run python scripts/analysis/report_figures.py \
         [--input results/overnight/iterations.jsonl] \
         [--outdir docs/report/images]
-
-The committed default input is the snapshot shipped alongside this script so the
-figures rebuild without the (gitignored) runner results tree.
 """
 
 from __future__ import annotations
@@ -33,158 +22,238 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_INPUT = HERE / "iterations_snapshot.jsonl"
 
-# job_id -> plotting arm; only the fair-comparison K562 runs are shown.
-ABLATION = {
-    "PUM2 (crisp)": {
-        "llm": "final_pum2_k562_llm",
-        "llm_noprior": "final_pum2_k562_llm_noprior",
-        "optuna": "final_pum2_k562_optuna",
-    },
-    "HNRNPK (degenerate)": {
-        "llm": "final_hnrnpk_k562_llm",
-        "llm_noprior": "final_hnrnpk_k562_llm_noprior",
-        "optuna": "final_hnrnpk_k562_optuna",
-    },
-    "U2AF2 (positional)": {
-        "llm": "final_u2af2_k562_llm",
-        "llm_noprior": "final_u2af2_k562_llm_noprior",
-        "optuna": "final_u2af2_k562_optuna",
-    },
+BENCHMARKS = {
+    "K562": ["QKI", "PUM1", "PUM2", "HNRNPK", "SRSF1", "U2AF2", "SF3B4"],
+    "HepG2": ["RBFOX2", "HNRNPK", "SRSF1", "U2AF2", "SF3B4"],
 }
+PRIOR_ABLATIONS = ["QKI", "PUM2", "HNRNPK", "SRSF1", "U2AF2", "SF3B4"]
 
-ARM_STYLE = {
-    "llm": ("LLM with prior", "#176B87", "-", "o"),
-    "llm_noprior": ("LLM without prior", "#D97706", "--", "s"),
-    "optuna": ("Optuna (TPE)", "#5B6470", ":", "^"),
+COLORS = {
+    "llm": "#176B87",
+    "optuna": "#6D4C7D",
+    "positive": "#176B87",
+    "negative": "#D97706",
+    "neutral": "#7A838C",
+    "ink": "#263238",
+    "line": "#BCC4CA",
 }
 
 
 def load(path: Path):
-    by_job = defaultdict(list)
-    with open(path) as fh:
+    """Load final iteration records, deduplicating retried job iterations."""
+    newest = {}
+    with path.open() as fh:
         for line in fh:
-            rec = json.loads(line)
-            if rec.get("type") == "iteration":
-                by_job[rec["job_id"]].append(rec)
-    for job in by_job:
-        by_job[job].sort(key=lambda r: r["iteration"])
+            record = json.loads(line)
+            if record.get("type") != "iteration":
+                continue
+            key = (record["job_id"], record["iteration"])
+            previous = newest.get(key)
+            if previous is None or record.get("mtime", 0) >= previous.get("mtime", 0):
+                newest[key] = record
+
+    by_job = defaultdict(list)
+    for record in newest.values():
+        by_job[record["job_id"]].append(record)
+    for rows in by_job.values():
+        rows.sort(key=lambda row: row["iteration"])
     return by_job
 
 
-def running_best(comps):
-    best, out = float("-inf"), []
-    for c in comps:
-        best = max(best, c)
-        out.append(best)
-    return out
+def job_id(protein: str, cell_line: str, arm: str) -> str:
+    return f"final_{protein.lower()}_{cell_line.lower()}_{arm}"
 
 
-def fig_convergence(by_job, outdir: Path):
-    plt.rcParams.update({"font.size": 9, "axes.titlesize": 10, "axes.labelsize": 9})
-    fig, axes = plt.subplots(1, 3, figsize=(10.6, 3.25), sharey=True)
-    for ax, (title, arms) in zip(axes, ABLATION.items()):
-        baseline = None
-        for arm, job in arms.items():
-            rows = by_job.get(job)
-            if not rows:
-                continue
-            iters = [r["iteration"] for r in rows]
-            best = running_best([r["composite"] for r in rows])
-            if baseline is None:
-                baseline = rows[0]["composite"]
-            label, color, ls, marker = ARM_STYLE[arm]
-            ax.plot(iters, best, ls, color=color, marker=marker, ms=4, lw=1.8, label=label)
-        if baseline is not None:
-            ax.axhline(baseline, color="black", lw=0.8, alpha=0.5)
-            ax.text(0.02, baseline + 0.004, "default", fontsize=7,
-                    transform=ax.get_yaxis_transform(), va="bottom", alpha=0.7)
-        ax.set_title(title, fontsize=10)
-        ax.set_xlabel("Evaluation")
-        ax.grid(alpha=0.25)
-    axes[0].set_ylabel("Best composite score")
-    axes[0].legend(fontsize=8, loc="lower right")
-    fig.tight_layout()
-    out = outdir / "convergence_ablation.png"
-    fig.savefig(out, dpi=300, bbox_inches="tight")
+def best_score(by_job, job: str) -> float:
+    rows = by_job.get(job, [])
+    if not rows:
+        raise KeyError(f"No iteration records found for {job}")
+    return max(row["composite"] for row in rows)
+
+
+def fig_benchmark(by_job, outdir: Path):
+    """Plot all final LLM--TPE comparisons as two compact dumbbell panels."""
+    plt.rcParams.update({"font.size": 8.5, "axes.titlesize": 10, "axes.labelsize": 9})
+    fig, axes = plt.subplots(
+        1,
+        2,
+        figsize=(10.6, 3.85),
+        sharex=True,
+        gridspec_kw={"width_ratios": [1.08, 0.92]},
+    )
+
+    for ax, (cell_line, proteins) in zip(axes, BENCHMARKS.items()):
+        y_positions = list(range(len(proteins)))[::-1]
+        llm_higher = 0
+        tpe_higher = 0
+        for y, protein in zip(y_positions, proteins):
+            llm_job = job_id(protein, cell_line, "llm")
+            tpe_job = job_id(protein, cell_line, "optuna")
+            llm = best_score(by_job, llm_job)
+            tpe = best_score(by_job, tpe_job)
+            llm_higher += llm > tpe
+            tpe_higher += tpe > llm
+
+            ax.plot([llm, tpe], [y, y], color=COLORS["line"], lw=1.7, zorder=1)
+            for score, arm, marker in (
+                (llm, "llm", "o"),
+                (tpe, "optuna", "^"),
+            ):
+                ax.scatter(
+                    score,
+                    y,
+                    s=43,
+                    marker=marker,
+                    facecolor=COLORS[arm],
+                    edgecolor=COLORS[arm],
+                    linewidth=0.7,
+                    zorder=3,
+                )
+
+        ax.set_yticks(y_positions)
+        ax.set_yticklabels(proteins)
+        ax.set_title(cell_line, loc="left", weight="bold", color=COLORS["ink"])
+        ax.set_xlabel("Best composite score")
+        ax.set_xlim(0.10, 0.57)
+        ax.grid(axis="x", alpha=0.22, lw=0.7)
+        ax.spines[["top", "right", "left"]].set_visible(False)
+        ax.tick_params(axis="y", length=0)
+        ax.text(
+            0.99,
+            1.015,
+            f"Observed higher: LLM {llm_higher}  |  TPE {tpe_higher}",
+            transform=ax.transAxes,
+            ha="right",
+            va="bottom",
+            fontsize=7.4,
+            color="#56616A",
+        )
+
+    handles = [
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=COLORS["llm"],
+               markeredgecolor=COLORS["llm"], markersize=6, label="LLM with prior"),
+        Line2D([0], [0], marker="^", color="none", markerfacecolor=COLORS["optuna"],
+               markeredgecolor=COLORS["optuna"], markersize=6, label="Optuna (TPE)"),
+    ]
+    fig.legend(handles=handles, ncol=2, loc="lower center", frameon=False, bbox_to_anchor=(0.5, -0.01))
+    fig.suptitle(
+        "Observed optimizer outcomes across completed paired runs",
+        x=0.08,
+        y=1.03,
+        ha="left",
+        fontsize=11,
+        weight="bold",
+        color=COLORS["ink"],
+    )
+    fig.tight_layout(rect=(0, 0.08, 1, 0.98), w_pad=2.3)
+    out = outdir / "benchmark_summary.png"
+    fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return out
 
 
-def fig_deltas(by_job, outdir: Path):
-    tiers, prior_d, h2h_d = [], [], []
-    for title, arms in ABLATION.items():
-        def best(job):
-            rows = by_job.get(job)
-            return max(r["composite"] for r in rows) if rows else None
-        llm, npr, opt = best(arms["llm"]), best(arms["llm_noprior"]), best(arms["optuna"])
-        tiers.append(title.split(" (")[0])
-        prior_d.append(llm - npr)
-        h2h_d.append(llm - opt)
+def fig_prior_ablation(by_job, outdir: Path):
+    """Plot the effect of providing RBP-specific context to the LLM."""
+    deltas = []
+    for protein in PRIOR_ABLATIONS:
+        with_prior = best_score(by_job, job_id(protein, "K562", "llm"))
+        without_prior = best_score(by_job, job_id(protein, "K562", "llm_noprior"))
+        deltas.append(with_prior - without_prior)
 
-    x = range(len(tiers))
-    w = 0.38
-    fig, ax = plt.subplots(figsize=(6, 3.2))
-    ax.bar([i - w / 2 for i in x], prior_d, w, label="prior benefit (LLM$-$no-prior)", color="#1b6ca8")
-    ax.bar([i + w / 2 for i in x], h2h_d, w, label="head-to-head (LLM$-$Optuna)", color="#c1666b")
-    ax.axhline(0, color="black", lw=0.8)
-    ax.set_xticks(list(x))
-    ax.set_xticklabels(tiers)
-    ax.set_ylabel(r"$\Delta$ composite")
-    ax.set_title("Effect of the biological prior by motif difficulty (K562)")
-    ax.legend(fontsize=8)
-    ax.grid(axis="y", alpha=0.25)
+    y_positions = list(range(len(PRIOR_ABLATIONS)))[::-1]
+    colors = [
+        COLORS["positive"] if delta > 0.00005 else
+        COLORS["negative"] if delta < -0.00005 else
+        COLORS["neutral"]
+        for delta in deltas
+    ]
+    fig, ax = plt.subplots(figsize=(7.3, 3.0))
+    ax.barh(y_positions, deltas, height=0.58, color=colors)
+    ax.axvline(0, color=COLORS["ink"], lw=0.9)
+    ax.set_yticks(y_positions)
+    ax.set_yticklabels(PRIOR_ABLATIONS)
+    ax.set_xlabel("Prior effect: best LLM with prior - best LLM without prior")
+    ax.set_xlim(-0.05, 0.10)
+    ax.grid(axis="x", alpha=0.22, lw=0.7)
+    ax.spines[["top", "right", "left"]].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+    for y, delta in zip(y_positions, deltas):
+        offset = 0.0025 if delta >= 0 else -0.0025
+        ax.text(
+            delta + offset,
+            y,
+            f"{delta:+.3f}",
+            va="center",
+            ha="left" if delta >= 0 else "right",
+            fontsize=8,
+            color=COLORS["ink"],
+        )
+    ax.set_title(
+        "RBP-specific context had a dataset-dependent effect (K562)",
+        loc="left",
+        fontsize=10.5,
+        weight="bold",
+        color=COLORS["ink"],
+    )
     fig.tight_layout()
-    out = outdir / "deltas_by_tier.png"
-    fig.savefig(out, dpi=300, bbox_inches="tight")
+    out = outdir / "prior_ablation.png"
+    fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     return out
 
 
 def fig_pipeline(outdir: Path):
-    """Draw the matched optimizer/evaluation design used in the study."""
-    fig, ax = plt.subplots(figsize=(10.6, 2.7))
+    """Draw the optimizer-specific inputs and the shared evaluation path."""
+    fig, ax = plt.subplots(figsize=(10.6, 3.25))
     ax.set_xlim(0, 10.6)
-    ax.set_ylim(0, 3.0)
+    ax.set_ylim(0, 3.25)
     ax.axis("off")
 
-    boxes = [
-        (0.15, 1.15, 1.75, 0.9, "Optimizer", "LLM or Optuna", "#E8F1F5", "#176B87"),
-        (2.35, 1.15, 1.75, 0.9, "Parameters", "7 bounded variables", "#F4F1E8", "#8A6D1D"),
-        (4.55, 1.15, 1.75, 0.9, "PureCLIP pipeline", "merged + replicate calls", "#EDF3EA", "#477A3A"),
-        (6.75, 1.15, 1.75, 0.9, "Biological scoring", "reproducibility · motif\nreference recall", "#F5EBF1", "#8B3E68"),
-        (8.95, 1.15, 1.5, 0.9, "Objective", "composite score\n+ yield guard", "#EFEFF2", "#4B5563"),
-    ]
-    for x, y, w, h, heading, detail, fill, edge in boxes:
+    def box(x, y, w, h, heading, detail, fill, edge):
         ax.add_patch(FancyBboxPatch(
             (x, y), w, h, boxstyle="round,pad=0.04,rounding_size=0.06",
             facecolor=fill, edgecolor=edge, linewidth=1.2,
         ))
-        ax.text(x + w / 2, y + 0.59, heading, ha="center", va="center",
-                fontsize=9, weight="bold", color="#20252B")
-        ax.text(x + w / 2, y + 0.27, detail, ha="center", va="center",
-                multialignment="center", linespacing=1.15, fontsize=7.2,
-                color="#38414A")
+        ax.text(x + w / 2, y + h * 0.66, heading, ha="center", va="center",
+                fontsize=8.8, weight="bold", color=COLORS["ink"])
+        ax.text(x + w / 2, y + h * 0.32, detail, ha="center", va="center",
+                multialignment="center", linespacing=1.15, fontsize=7.1, color="#44515A")
 
-    for left, right in zip(boxes, boxes[1:]):
-        start = (left[0] + left[2] + 0.05, 1.60)
-        end = (right[0] - 0.05, 1.60)
-        ax.add_patch(FancyArrowPatch(start, end, arrowstyle="-|>", mutation_scale=10,
-                                     linewidth=1.1, color="#4B5563"))
+    box(0.15, 1.82, 1.85, 0.83, "LLM proposal", "RBP prior + decomposed\nscore trajectory", "#E8F1F5", COLORS["llm"])
+    box(0.15, 0.58, 1.85, 0.83, "TPE proposal", "scalar-score history", "#F0EAF3", COLORS["optuna"])
+    box(2.55, 1.18, 1.65, 0.90, "Candidate", "7 bounded\nparameters", "#F4F1E8", "#8A6D1D")
+    box(4.72, 1.18, 1.85, 0.90, "Shared workflow", "PureCLIP +\npost-processing", "#EDF3EA", "#477A3A")
+    box(7.08, 1.18, 1.80, 0.90, "Measurements", "replicates · motif\nreference recall", "#F5EBF1", "#8B3E68")
+    box(9.38, 1.18, 1.05, 0.90, "Objective", "weighted score\n+ yield guard", "#EFEFF2", "#4B5563")
+
+    arrow = {"arrowstyle": "-|>", "mutation_scale": 10, "linewidth": 1.1, "color": "#59636B"}
+    ax.add_patch(FancyArrowPatch((2.02, 2.22), (2.53, 1.76), **arrow))
+    ax.add_patch(FancyArrowPatch((2.02, 1.00), (2.53, 1.49), **arrow))
+    for start, end in [((4.22, 1.63), (4.70, 1.63)), ((6.59, 1.63), (7.06, 1.63)), ((8.90, 1.63), (9.36, 1.63))]:
+        ax.add_patch(FancyArrowPatch(start, end, **arrow))
 
     ax.add_patch(FancyArrowPatch(
-        (9.70, 1.08), (1.0, 1.08), connectionstyle="arc3,rad=-0.20",
-        arrowstyle="-|>", mutation_scale=11, linewidth=1.1, color="#176B87",
+        (7.85, 2.13), (1.05, 2.69), connectionstyle="arc3,rad=0.08",
+        arrowstyle="-|>", mutation_scale=10, linewidth=1.05, color=COLORS["llm"],
     ))
-    ax.text(5.35, 0.34, "Decomposed scores and the best-so-far trajectory are returned to the optimizer",
-            ha="center", va="center", fontsize=8, color="#176B87",
-            bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.5})
-    ax.text(5.3, 2.65, "Shared evaluation; only the parameter-proposal strategy changes",
-            ha="center", va="center", fontsize=10, weight="bold", color="#20252B")
+    ax.text(4.55, 2.79, "component feedback", ha="center", va="center",
+            fontsize=7.3, color=COLORS["llm"],
+            bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.0})
+    ax.add_patch(FancyArrowPatch(
+        (9.90, 1.13), (1.05, 0.54), connectionstyle="arc3,rad=-0.08",
+        arrowstyle="-|>", mutation_scale=10, linewidth=1.05, color=COLORS["optuna"],
+    ))
+    ax.text(5.55, 0.31, "scalar feedback", ha="center", va="center",
+            fontsize=7.3, color=COLORS["optuna"],
+            bbox={"facecolor": "white", "edgecolor": "none", "pad": 1.0})
+    ax.text(5.3, 3.12, "Different proposal loops, matched evaluation",
+            ha="center", va="center", fontsize=10.5, weight="bold", color=COLORS["ink"])
 
     out = outdir / "pipeline_overview.png"
     fig.savefig(out, dpi=300, bbox_inches="tight", facecolor="white")
@@ -193,15 +262,18 @@ def fig_pipeline(outdir: Path):
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--input", type=Path, default=DEFAULT_INPUT)
-    ap.add_argument("--outdir", type=Path,
-                    default=HERE.parents[1] / "docs" / "report" / "images")
-    args = ap.parse_args()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", type=Path, default=DEFAULT_INPUT)
+    parser.add_argument(
+        "--outdir",
+        type=Path,
+        default=HERE.parents[1] / "docs" / "report" / "images",
+    )
+    args = parser.parse_args()
     args.outdir.mkdir(parents=True, exist_ok=True)
     by_job = load(args.input)
-    print("wrote", fig_convergence(by_job, args.outdir))
-    print("wrote", fig_deltas(by_job, args.outdir))
+    print("wrote", fig_benchmark(by_job, args.outdir))
+    print("wrote", fig_prior_ablation(by_job, args.outdir))
     print("wrote", fig_pipeline(args.outdir))
 
 
