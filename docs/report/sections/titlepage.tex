@@ -31,13 +31,14 @@ degenerate solutions containing fewer than ten sites. We evaluated the framework
 on chromosome~21 in 12 completed paired LLM--TPE dataset/cell-line comparisons
 across K562 and HepG2, with six additional K562 prior ablations. TPE produced the
 higher observed best score in ten pairs. However, TPE runs used 14--16
-evaluations and LLM runs only five to seven, precluding a controlled efficiency ranking. Biological
-context increased the best LLM score for HNRNPK and QKI, reduced it for three
-datasets, and left one unchanged. The proposed monotonic relation between motif
-difficulty and prior benefit was not observed. These results establish a
+evaluations and LLM runs only five to seven, precluding a controlled efficiency
+ranking. Prior and no-prior LLM outcomes were nearly even overall: the mean
+prior advantage was 0.004 and the median difference was $-0.002$, with modest
+dataset-specific variation except for HNRNPK. The proposed monotonic relation
+between motif difficulty and prior benefit was not observed. These results establish a
 reproducible evaluation framework and an empirical baseline for a subset of the
-larger dataset registry; replicated,
-equal-budget experiments are required to compare optimizers and determine when
+larger dataset registry; replicated, equal-budget experiments are required to
+compare optimizers and determine when
 biological context improves peak calling.
 
 

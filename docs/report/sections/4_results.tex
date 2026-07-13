@@ -43,22 +43,25 @@ cohort. TPE also had ten startup samples before its stagnation rule applied. The
 comparison therefore measures the best result under the implemented stopping
 rules, not equal-budget sample efficiency.
 
-\subsection{Biological context had a dataset-dependent effect}
+\subsection{Prior and no-prior outcomes were similar overall}
 
-Six K562 datasets have both LLM conditions (Figure~\ref{fig:prior}). The prior
-increased the best score for HNRNPK by 0.087 and QKI by 0.009, decreased it for
-PUM2 by 0.031, U2AF2 by 0.037, and SRSF1 by 0.004, and made no difference for
-SF3B4. For the pre-specified crisp--degenerate--positional gradient, only HNRNPK
-benefited; PUM2 and U2AF2 did not. The additional datasets likewise show no
-uniform direction. RBP-specific context changed search outcomes, but these
-single-run ablations do not establish a class-level effect.
+Six K562 datasets have both LLM conditions (Figure~\ref{fig:prior}). Across these
+runs, the mean prior-minus-no-prior difference was $+0.004$ and the median was
+$-0.002$. The two conditions were therefore nearly even in aggregate, with only
+a slight mean edge for the prior that was driven by HNRNPK ($+0.087$). The other
+differences were smaller and mixed: QKI $+0.009$, PUM2 $-0.031$, U2AF2 $-0.037$,
+SRSF1 $-0.004$, and SF3B4 $0.000$. For the pre-specified
+crisp--degenerate--positional gradient, the directions did not form a monotonic
+trend. These single-run ablations support a dataset-specific interpretation but
+do not establish a general prior advantage or a class-level effect.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.84\linewidth]{images/prior_ablation.png}
-\caption{Effect of biological context on the best LLM score in six K562
-datasets. Positive values favor the prior-equipped arm. Each difference compares
-one trajectory per condition and has no uncertainty estimate.}
+\caption{Difference between the best prior and no-prior LLM scores in six K562
+datasets. The aggregate difference is close to zero; positive values favor the
+prior-equipped arm. Each point compares one trajectory per condition and has no
+uncertainty estimate.}
 \label{fig:prior}
 \end{figure}
 

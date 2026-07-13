@@ -37,9 +37,6 @@ PRIOR_ABLATIONS = ["QKI", "PUM2", "HNRNPK", "SRSF1", "U2AF2", "SF3B4"]
 COLORS = {
     "llm": "#176B87",
     "optuna": "#6D4C7D",
-    "positive": "#176B87",
-    "negative": "#D97706",
-    "neutral": "#7A838C",
     "ink": "#263238",
     "line": "#BCC4CA",
 }
@@ -167,14 +164,13 @@ def fig_prior_ablation(by_job, outdir: Path):
         deltas.append(with_prior - without_prior)
 
     y_positions = list(range(len(PRIOR_ABLATIONS)))[::-1]
-    colors = [
-        COLORS["positive"] if delta > 0.00005 else
-        COLORS["negative"] if delta < -0.00005 else
-        COLORS["neutral"]
-        for delta in deltas
-    ]
+    ordered = sorted(deltas)
+    mean_delta = sum(deltas) / len(deltas)
+    median_delta = (ordered[2] + ordered[3]) / 2
     fig, ax = plt.subplots(figsize=(7.3, 3.0))
-    ax.barh(y_positions, deltas, height=0.58, color=colors)
+    for y, delta in zip(y_positions, deltas):
+        ax.plot([0, delta], [y, y], color=COLORS["line"], lw=2.0, zorder=1)
+        ax.scatter(delta, y, s=45, color=COLORS["llm"], zorder=2)
     ax.axvline(0, color=COLORS["ink"], lw=0.9)
     ax.set_yticks(y_positions)
     ax.set_yticklabels(PRIOR_ABLATIONS)
@@ -194,8 +190,18 @@ def fig_prior_ablation(by_job, outdir: Path):
             fontsize=8,
             color=COLORS["ink"],
         )
+    ax.text(
+        0.99,
+        0.94,
+        f"Mean {mean_delta:+.3f}  |  median {median_delta:+.3f}",
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=8,
+        color="#56616A",
+    )
     ax.set_title(
-        "RBP-specific context had a dataset-dependent effect (K562)",
+        "Prior and no-prior LLM outcomes were similar overall (K562)",
         loc="left",
         fontsize=10.5,
         weight="bold",

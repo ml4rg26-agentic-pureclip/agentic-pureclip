@@ -11,17 +11,16 @@ changes to increases above 0.20. This variation supports dataset-specific tuning
 although the current sample is too small to identify which experimental
 properties predict a gain.
 
-Second, biological context influenced LLM performance, but not uniformly. The
-positive HNRNPK ablation result is biologically plausible: C-rich motif and
-footprint information directed the agent toward sharper, more strongly supported
-calls. However, the same prior formulation reduced the best score on PUM2,
-U2AF2, and slightly on SRSF1, while SF3B4 was unchanged. For U2AF2, sequence
-motifs are an incomplete description of binding because position relative to
-splice sites is central. More generally, one trajectory per condition cannot
-distinguish a protein-class effect from dataset idiosyncrasies or stochastic LLM
-behavior. The HNRNPK result should therefore be treated as a candidate mechanism
-for further testing, not evidence that priors generally benefit proteins with
-degenerate motifs.
+Second, prior and no-prior LLM performance was broadly comparable. The mean
+difference gave the prior a slight edge of 0.004, but the median was $-0.002$:
+two datasets favored the prior, three favored no prior, and one was tied. The
+larger positive HNRNPK difference accounts for the small mean advantage, whereas
+the remaining differences were modest and mixed. This is consistent with a
+dataset-specific effect rather than a systematic benefit of biological context.
+For U2AF2, sequence motifs are also an incomplete description of binding because
+position relative to splice sites is central. With one trajectory per condition,
+protein-class effects cannot be separated from dataset idiosyncrasies or
+stochastic LLM behavior.
 
 TPE had the higher observed score in ten of 12 completed pairs. This is a
 consistent descriptive pattern across both cell lines. It is not, however,
