@@ -104,7 +104,7 @@ conclusive comparison requires replicated, equal-budget, genome-wide runs.
 | Thesis source and complete study account | [`docs/report/`](docs/report/) |
 | Experimental and run configurations | [`config/`](config/) |
 | Architecture and data flow | [`docs/architecture-overview.md`](docs/architecture-overview.md) |
-| Dataset expansion notes | [`docs/NEW_DATA_INVESTIGATION.md`](docs/NEW_DATA_INVESTIGATION.md) |
+| Dataset registry and configuration reference | [`config/README.md`](config/README.md) |
 | Interactive research presentation | [`docs/presentation/index.html`](docs/presentation/index.html) |
 | Monitoring dashboard documentation | [`dashboard/README.md`](dashboard/README.md) |
 

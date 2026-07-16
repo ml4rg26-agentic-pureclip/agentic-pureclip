@@ -190,7 +190,7 @@ export default function DatasetsPage() {
         5 · How to run
       </h2>
       <p className="text-gray-400 max-w-3xl">
-        Datasets are registered in <code className="text-amber-300">pipeline/datasets.py</code>; per-dataset
+        Datasets are registered in <code className="text-amber-300">src/agentic_pureclip/pipeline/datasets.py</code>; per-dataset
         configs live in <code className="text-amber-300">config/datasets/*.yaml</code>. Preliminary
         (chr21-restricted) optimization for all 20:
       </p>
@@ -209,8 +209,8 @@ uv run python scripts/run/batch_runner.py --manifest config/new_batch_runs.yaml 
       </div>
 
       <p className="text-gray-600 text-xs mt-10 border-t border-gray-800 pt-4">
-        Source: 3 shared Google-Drive folders (37.6 GiB) · see{" "}
-        <code className="text-amber-300">NEW_DATA_INVESTIGATION.md</code> for the full investigation and time budget.
+        Source: 3 shared Google-Drive folders (37.6 GiB) · registry and configuration:
+        {" "}<code className="text-amber-300">config/README.md</code>.
       </p>
     </div>
   );
